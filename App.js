@@ -225,7 +225,7 @@ function ActiveVideoSlide({ item, index, activeIndex, serverIp, onDelete, uiVisi
 }
 
 export default function App() {
-  const [serverIp, setServerIp] = useState('192.168.56.1');
+  const [serverIp, setServerIp] = useState('192.168.1.2');
   const [isConnected, setIsConnected] = useState(false);
   const [serverVideos, setServerVideos] = useState([]);
   const [localVideos, setLocalVideos] = useState([]);
