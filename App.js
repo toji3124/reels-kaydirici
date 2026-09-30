@@ -211,7 +211,7 @@ function VideoSlide({ item, index, activeIndex, serverIp, onDelete, uiVisible, s
 }
 
 export default function App() {
-  const [serverIp, setServerIp] = useState('192.168.1.2');
+  const [serverIp, setServerIp] = useState('192.168.56.1');
   const [isConnected, setIsConnected] = useState(false);
   const [serverVideos, setServerVideos] = useState([]);
   const [localVideos, setLocalVideos] = useState([]);
@@ -254,7 +254,8 @@ export default function App() {
   const connectToServer = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`http://${serverIp}:3000/api/files`);
+      const cleanIp = serverIp.trim();
+      const res = await fetch(`http://${cleanIp}:3000/api/files`);
       const data = await res.json();
       if (data.files) {
         setServerVideos(data.files);
@@ -263,7 +264,7 @@ export default function App() {
         Alert.alert('Bağlandı!', `${data.files.length} video bulundu.`);
       }
     } catch (err) {
-      Alert.alert('Bağlantı Hatası', 'Sunucuya ulaşılamadı. IP adresini kontrol et.');
+      Alert.alert('Bağlantı Hatası', `Sunucuya ulaşılamadı. IP: ${serverIp.trim()}\nHata: ${err.message}`);
     }
     setLoading(false);
   };
