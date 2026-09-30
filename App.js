@@ -21,9 +21,22 @@ function formatTime(seconds) {
   return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
 }
 
-function VideoSlide({ item, index, activeIndex, serverIp, onDelete, uiVisible, setUiVisible, isSwiping }) {
+function VideoSlide(props) {
+  const isAdjacent = Math.abs(props.index - props.activeIndex) <= 1;
+
+  if (!isAdjacent) {
+    return (
+      <View style={[styles.videoContainer, { backgroundColor: '#111', justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator color="#E1306C" />
+      </View>
+    );
+  }
+
+  return <ActiveVideoSlide {...props} />;
+}
+
+function ActiveVideoSlide({ item, index, activeIndex, serverIp, onDelete, uiVisible, setUiVisible, isSwiping }) {
   const isActive = index === activeIndex;
-  const isAdjacent = Math.abs(index - activeIndex) <= 1;
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isSpeedUp, setIsSpeedUp] = useState(false);
@@ -41,7 +54,7 @@ function VideoSlide({ item, index, activeIndex, serverIp, onDelete, uiVisible, s
   }
   const videoUri = item.isLocal ? item.uri : serverVideoUri;
   
-  const player = useVideoPlayer(isAdjacent ? videoUri : null, p => {
+  const player = useVideoPlayer(videoUri, p => {
     p.loop = true;
     p.muted = false;
   });
@@ -124,47 +137,41 @@ function VideoSlide({ item, index, activeIndex, serverIp, onDelete, uiVisible, s
 
   return (
     <View style={styles.videoContainer}>
-      {isAdjacent ? (
-        <Pressable 
-          style={styles.videoTouchable}
-          onPressIn={handlePressIn}
-          onPress={handlePress}
-          onLongPress={handleLongPress}
-          onPressOut={handlePressOut}
-          delayLongPress={250}
-        >
-          <VideoView
-            player={player}
-            style={styles.video}
-            contentFit="cover"
-            nativeControls={false}
+      <Pressable 
+        style={styles.videoTouchable}
+        onPressIn={handlePressIn}
+        onPress={handlePress}
+        onLongPress={handleLongPress}
+        onPressOut={handlePressOut}
+        delayLongPress={250}
+      >
+        <VideoView
+          player={player}
+          style={styles.video}
+          contentFit="cover"
+          nativeControls={false}
+        />
+        
+        {showSlideUi && (
+          <LinearGradient
+            colors={['rgba(0,0,0,0.5)', 'transparent', 'transparent', 'rgba(0,0,0,0.9)']}
+            style={styles.gradientOverlay}
+            pointerEvents="none"
           />
-          
-          {showSlideUi && (
-            <LinearGradient
-              colors={['rgba(0,0,0,0.5)', 'transparent', 'transparent', 'rgba(0,0,0,0.9)']}
-              style={styles.gradientOverlay}
-              pointerEvents="none"
-            />
-          )}
+        )}
 
-          {isPaused && !isLongPressPause && (
-            <View style={styles.pauseIconContainer} pointerEvents="none">
-              <Text style={styles.pauseIcon}>⏸</Text>
-            </View>
-          )}
+        {isPaused && !isLongPressPause && (
+          <View style={styles.pauseIconContainer} pointerEvents="none">
+            <Text style={styles.pauseIcon}>⏸</Text>
+          </View>
+        )}
 
-          {isSpeedUp && (
-            <View style={styles.speedUpOverlay} pointerEvents="none">
-              <Text style={styles.speedUpText}>⏩ 2x</Text>
-            </View>
-          )}
-        </Pressable>
-      ) : (
-        <View style={[styles.videoTouchable, { backgroundColor: '#111', justifyContent: 'center', alignItems: 'center' }]}>
-          <ActivityIndicator color="#E1306C" />
-        </View>
-      )}
+        {isSpeedUp && (
+          <View style={styles.speedUpOverlay} pointerEvents="none">
+            <Text style={styles.speedUpText}>⏩ 2x</Text>
+          </View>
+        )}
+      </Pressable>
 
       {showSlideUi && (
         <>
