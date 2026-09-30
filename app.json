@@ -1,0 +1,31 @@
+{
+  "expo": {
+    "name": "Reels Kaydırıcı",
+    "slug": "mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/app_icon.jpg",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.reelsindirici.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#1A1A2E",
+        "foregroundImage": "./assets/app_icon.jpg"
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-video"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "416f9ce7-0bf7-4ff7-8e79-024fe36c8129"
+      }
+    }
+  }
+}
