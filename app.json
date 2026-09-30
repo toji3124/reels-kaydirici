@@ -1,19 +1,20 @@
 {
   "expo": {
-    "name": "Reels Kaydırıcı",
+    "name": "Reels Kaydirici",
     "slug": "mobile",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/app_icon.jpg",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true
     },
     "android": {
       "package": "com.reelsindirici.app",
+      "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "backgroundColor": "#1A1A2E",
-        "foregroundImage": "./assets/app_icon.jpg"
+        "foregroundImage": "./assets/icon.png"
       }
     },
     "web": {
