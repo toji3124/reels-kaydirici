@@ -32,7 +32,14 @@ function VideoSlide({ item, index, activeIndex, serverIp, onDelete, uiVisible, s
   
   const touchX = useRef(0);
   
-  const videoUri = item.isLocal ? item.uri : `http://${serverIp}:3000${item.path}`;
+  const cleanIp = serverIp.trim();
+  let serverVideoUri = '';
+  if (cleanIp.startsWith('http')) {
+    serverVideoUri = `${cleanIp}${item.path}`;
+  } else {
+    serverVideoUri = `http://${cleanIp}:3000${item.path}`;
+  }
+  const videoUri = item.isLocal ? item.uri : serverVideoUri;
   
   const player = useVideoPlayer(isAdjacent ? videoUri : null, p => {
     p.loop = true;
@@ -255,7 +262,13 @@ export default function App() {
     setLoading(true);
     try {
       const cleanIp = serverIp.trim();
-      const res = await fetch(`http://${cleanIp}:3000/api/files`);
+      let fetchUrl = '';
+      if (cleanIp.startsWith('http')) {
+        fetchUrl = `${cleanIp}/api/files`;
+      } else {
+        fetchUrl = `http://${cleanIp}:3000/api/files`;
+      }
+      const res = await fetch(fetchUrl);
       const data = await res.json();
       if (data.files) {
         setServerVideos(data.files);
@@ -293,7 +306,14 @@ export default function App() {
       const exists = await FileSystem.getInfoAsync(fileUri);
       if (!exists.exists) {
         try {
-          const downloadRes = await FileSystem.downloadAsync(`http://${serverIp}:3000${file.path}`, fileUri);
+          const cleanIp = serverIp.trim();
+          let downloadUrl = '';
+          if (cleanIp.startsWith('http')) {
+            downloadUrl = `${cleanIp}${file.path}`;
+          } else {
+            downloadUrl = `http://${cleanIp}:3000${file.path}`;
+          }
+          const downloadRes = await FileSystem.downloadAsync(downloadUrl, fileUri);
           const base64Data = await FileSystem.readAsStringAsync(downloadRes.uri, { encoding: FileSystem.EncodingType.Base64 });
           const newFileUri = await FileSystem.StorageAccessFramework.createFileAsync(permissions.directoryUri, file.name, 'video/mp4');
           await FileSystem.writeAsStringAsync(newFileUri, base64Data, { encoding: FileSystem.EncodingType.Base64 });
