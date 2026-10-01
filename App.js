@@ -41,7 +41,7 @@ function ActiveVideoSlide({ item, index, activeIndex, serverIp, onDelete, uiVisi
   const [duration, setDuration] = useState(0);
   const [isSpeedUp, setIsSpeedUp] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
-  const [isLongPressPause, setIsLongPressPause] = useState(false);
+  const isLongPressPauseRef = useRef(false);
   
   const touchX = useRef(0);
   const longPressTimer = useRef(null);
@@ -67,7 +67,7 @@ function ActiveVideoSlide({ item, index, activeIndex, serverIp, onDelete, uiVisi
     if (!isActive) {
       setIsPaused(false);
       setIsSpeedUp(false);
-      setIsLongPressPause(false);
+      isLongPressPauseRef.current = false;
       if (longPressTimer.current) {
         clearTimeout(longPressTimer.current);
         longPressTimer.current = null;
@@ -109,61 +109,43 @@ function ActiveVideoSlide({ item, index, activeIndex, serverIp, onDelete, uiVisi
     }
   };
 
-  // Manuel dokunma yönetimi (Pressable yerine)
-  const onTouchStart = (e) => {
+  const handlePressIn = (e) => {
     touchX.current = e.nativeEvent.pageX;
-    isLongPressRef.current = false;
-    
-    longPressTimer.current = setTimeout(() => {
-      isLongPressRef.current = true;
-      if (!player) return;
-      
-      // Kenarlardan basılı tutma = 2x hız
-      if (touchX.current > width * 0.75 || touchX.current < width * 0.25) {
-        if (!isPaused) {
-          player.playbackRate = 2.0;
-          setIsSpeedUp(true);
-        }
-      } else {
-        // Ortadan basılı tutma = dondur + UI gizle
-        setIsPaused(true);
-        setIsLongPressPause(true);
-        setUiVisible(false);
-      }
-    }, 300);
   };
 
-  const onTouchEnd = () => {
-    if (longPressTimer.current) {
-      clearTimeout(longPressTimer.current);
-      longPressTimer.current = null;
-    }
+  const handleLongPress = () => {
+    if (!player) return;
     
-    if (isLongPressRef.current) {
-      // Basılı tutma bitti
-      if (player) {
-        player.playbackRate = 1.0;
-        setIsSpeedUp(false);
+    // Kenarlardan basılı tutma = 2x hız
+    if (touchX.current > width * 0.75 || touchX.current < width * 0.25) {
+      if (!isPaused) {
+        player.playbackRate = 2.0;
+        setIsSpeedUp(true);
       }
-      if (isLongPressPause) {
-        setIsPaused(false);
-        setIsLongPressPause(false);
-        setUiVisible(true);
-      }
-      isLongPressRef.current = false;
     } else {
-      // Kısa tıklama = durdur/devam et + UI aç/kapa
-      setIsPaused(prev => !prev);
-      setUiVisible(prev => !prev);
+      // Ortadan basılı tutma = dondur + UI gizle
+      setIsPaused(true);
+      isLongPressPauseRef.current = true;
+      setUiVisible(false);
     }
   };
 
-  const onTouchMove = () => {
-    // Parmak hareket ettiyse long press'i iptal et (kaydırma olabilir)
-    if (longPressTimer.current) {
-      clearTimeout(longPressTimer.current);
-      longPressTimer.current = null;
+  const handlePressOut = () => {
+    if (player) {
+      player.playbackRate = 1.0;
+      setIsSpeedUp(false);
     }
+    
+    if (isLongPressPauseRef.current) {
+      setIsPaused(false);
+      isLongPressPauseRef.current = false;
+      setUiVisible(true);
+    }
+  };
+
+  const handlePress = () => {
+    setIsPaused(prev => !prev);
+    setUiVisible(prev => !prev);
   };
 
   const handleSeek = (value) => {
@@ -173,24 +155,26 @@ function ActiveVideoSlide({ item, index, activeIndex, serverIp, onDelete, uiVisi
     }
   };
 
-  const showSlideUi = uiVisible && !isLongPressPause;
+  const showSlideUi = uiVisible && !isLongPressPauseRef.current;
 
   return (
     <View style={styles.videoContainer}>
-      <View 
-        style={styles.videoTouchable}
-        onTouchStart={onTouchStart}
-        onTouchEnd={onTouchEnd}
-        onTouchMove={onTouchMove}
+      <VideoView
+        ref={videoViewRef}
+        player={player}
+        style={styles.video}
+        contentFit="contain"
+        nativeControls={false}
+      />
+      
+      <Pressable 
+        style={[StyleSheet.absoluteFill, { zIndex: 5 }]}
+        onPressIn={handlePressIn}
+        onPress={handlePress}
+        onLongPress={handleLongPress}
+        onPressOut={handlePressOut}
+        delayLongPress={200}
       >
-        <VideoView
-          ref={videoViewRef}
-          player={player}
-          style={styles.video}
-          contentFit="contain"
-          nativeControls={false}
-        />
-        
         {showSlideUi && (
           <LinearGradient
             colors={['rgba(0,0,0,0.5)', 'transparent', 'transparent', 'rgba(0,0,0,0.9)']}
@@ -199,7 +183,7 @@ function ActiveVideoSlide({ item, index, activeIndex, serverIp, onDelete, uiVisi
           />
         )}
 
-        {isPaused && !isLongPressPause && (
+        {isPaused && !isLongPressPauseRef.current && (
           <View style={styles.pauseIconContainer} pointerEvents="none">
             <Text style={styles.pauseIcon}>⏸</Text>
           </View>
@@ -210,7 +194,7 @@ function ActiveVideoSlide({ item, index, activeIndex, serverIp, onDelete, uiVisi
             <Text style={styles.speedUpText}>⏩ 2x</Text>
           </View>
         )}
-      </View>
+      </Pressable>
 
       {showSlideUi && (
         <>
@@ -586,7 +570,7 @@ export default function App() {
                 onPress={() => {
                   const idx = parseInt(jumpIndex, 10);
                   if (!isNaN(idx) && idx >= 1 && idx <= currentList.length) {
-                    pagerRef.current?.setPage(idx - 1);
+                    pagerRef.current?.setPageWithoutAnimation(idx - 1);
                     setActiveIndex(idx - 1);
                   }
                   setShowJumpPrompt(false);
@@ -649,20 +633,20 @@ const styles = StyleSheet.create({
   speedUpOverlay: { position: 'absolute', top: 120, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.7)', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 25 },
   speedUpText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
   
-  sideActions: { position: 'absolute', right: 16, bottom: 160 },
+  sideActions: { position: 'absolute', right: 16, bottom: 160, zIndex: 10 },
   sideBtn: { alignItems: 'center', gap: 6, marginBottom: 20 },
   iconCircle: { width: 50, height: 50, borderRadius: 25, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
   iconText: { fontSize: 24 },
   sideLabel: { color: '#fff', fontSize: 12, fontWeight: 'bold', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: {width: 1, height: 1}, textShadowRadius: 3 },
   
-  videoInfo: { position: 'absolute', bottom: 100, left: 16, right: 80 },
+  videoInfo: { position: 'absolute', bottom: 100, left: 16, right: 80, zIndex: 10 },
   badge: { alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12, marginBottom: 8 },
   badgeLocal: { backgroundColor: '#10b981' },
   badgeServer: { backgroundColor: '#3b82f6' },
   badgeText: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
   videoName: { color: '#fff', fontSize: 15, fontWeight: '600', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: {width: 1, height: 1}, textShadowRadius: 3 },
   
-  scrubberContainer: { position: 'absolute', bottom: 65, left: 16, right: 16, flexDirection: 'row', alignItems: 'center' },
+  scrubberContainer: { position: 'absolute', bottom: 65, left: 16, right: 16, flexDirection: 'row', alignItems: 'center', zIndex: 10 },
   slider: { flex: 1, marginHorizontal: 10, height: 40 },
   timeText: { color: '#fff', fontSize: 13, fontWeight: 'bold', width: 45, textAlign: 'center', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: {width: 1, height: 1}, textShadowRadius: 3 },
 
