@@ -42,11 +42,11 @@ function ActiveVideoSlide({ item, index, activeIndex, serverIp, onDelete, uiVisi
   const [isSpeedUp, setIsSpeedUp] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [isLongPressPause, setIsLongPressPause] = useState(false);
-  const [fitMode, setFitMode] = useState('contain'); // contain = sığdır, cover = kırp
   
   const touchX = useRef(0);
   const longPressTimer = useRef(null);
   const isLongPressRef = useRef(false);
+  const videoViewRef = useRef(null);
   
   const cleanIp = serverIp.trim();
   let serverVideoUri = '';
@@ -103,13 +103,15 @@ function ActiveVideoSlide({ item, index, activeIndex, serverIp, onDelete, uiVisi
     if (player) player.muted = !player.muted;
   };
 
-  const toggleFit = () => {
-    setFitMode(prev => prev === 'contain' ? 'cover' : 'contain');
+  const toggleFullscreen = () => {
+    if (videoViewRef.current) {
+      videoViewRef.current.enterFullscreen();
+    }
   };
 
   // Manuel dokunma yönetimi (Pressable yerine)
   const onTouchStart = (e) => {
-    touchX.current = e.nativeEvent.locationX;
+    touchX.current = e.nativeEvent.pageX;
     isLongPressRef.current = false;
     
     longPressTimer.current = setTimeout(() => {
@@ -182,9 +184,10 @@ function ActiveVideoSlide({ item, index, activeIndex, serverIp, onDelete, uiVisi
         onTouchMove={onTouchMove}
       >
         <VideoView
+          ref={videoViewRef}
           player={player}
           style={styles.video}
-          contentFit={fitMode}
+          contentFit="contain"
           nativeControls={false}
         />
         
@@ -220,11 +223,11 @@ function ActiveVideoSlide({ item, index, activeIndex, serverIp, onDelete, uiVisi
               <Text style={styles.sideLabel}>Ses</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.sideBtn} onPress={toggleFit}>
-              <View style={[styles.iconCircle, { backgroundColor: fitMode === 'cover' ? 'rgba(59,130,246,0.7)' : 'rgba(255,255,255,0.2)' }]}>
-                <Text style={styles.iconText}>{fitMode === 'contain' ? '⛶' : '🔲'}</Text>
+            <TouchableOpacity style={styles.sideBtn} onPress={toggleFullscreen}>
+              <View style={[styles.iconCircle, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+                <Text style={styles.iconText}>⛶</Text>
               </View>
-              <Text style={styles.sideLabel}>{fitMode === 'contain' ? 'Kırp' : 'Sığdır'}</Text>
+              <Text style={styles.sideLabel}>Tam Ekran</Text>
             </TouchableOpacity>
             
             {item.isLocal && (
@@ -280,6 +283,10 @@ export default function App() {
   const [showSetup, setShowSetup] = useState(true);
   const [uiVisible, setUiVisible] = useState(true);
   const [isSwiping, setIsSwiping] = useState(false);
+  const [showJumpPrompt, setShowJumpPrompt] = useState(false);
+  const [jumpIndex, setJumpIndex] = useState('');
+  
+  const pagerRef = useRef(null);
 
   useEffect(() => {
     loadLocalVideos();
@@ -496,7 +503,9 @@ export default function App() {
               <Text style={styles.tabText}>🎵 TikTok</Text>
             </TouchableOpacity>
           </View>
-          <Text style={styles.counter}>{currentList.length}</Text>
+          <TouchableOpacity style={styles.counterContainer} onPress={() => setShowJumpPrompt(true)}>
+            <Text style={styles.counter}>{activeIndex + 1} / {currentList.length}</Text>
+          </TouchableOpacity>
         </View>
       )}
 
@@ -506,6 +515,7 @@ export default function App() {
         </View>
       ) : (
         <PagerView 
+          ref={pagerRef}
           style={{ flex: 1 }} 
           initialPage={0} 
           orientation="vertical"
@@ -552,6 +562,41 @@ export default function App() {
             </TouchableOpacity>
           )}
         </View>
+      {/* Jump Modal */}
+      {showJumpPrompt && (
+        <View style={styles.jumpOverlay}>
+          <View style={styles.jumpBox}>
+            <Text style={styles.jumpTitle}>Reels'e Git (1 - {currentList.length})</Text>
+            <TextInput
+              style={styles.jumpInput}
+              keyboardType="number-pad"
+              autoFocus
+              value={jumpIndex}
+              onChangeText={setJumpIndex}
+              placeholder="Örn: 50"
+              placeholderTextColor="#888"
+            />
+            <View style={styles.jumpButtons}>
+              <TouchableOpacity style={styles.jumpBtnCancel} onPress={() => setShowJumpPrompt(false)}>
+                <Text style={styles.jumpBtnText}>İptal</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.jumpBtnGo} 
+                onPress={() => {
+                  const idx = parseInt(jumpIndex, 10);
+                  if (!isNaN(idx) && idx >= 1 && idx <= currentList.length) {
+                    pagerRef.current?.setPage(idx - 1);
+                    setActiveIndex(idx - 1);
+                  }
+                  setShowJumpPrompt(false);
+                  setJumpIndex('');
+                }}
+              >
+                <Text style={styles.jumpBtnText}>Git</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
       )}
     </View>
   );
@@ -580,7 +625,17 @@ const styles = StyleSheet.create({
   tabActiveIg: { backgroundColor: '#E1306C' },
   tabActiveTt: { backgroundColor: '#00f2ea' },
   tabText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
-  counter: { color: '#fff', fontSize: 15, fontWeight: 'bold', minWidth: 40, textAlign: 'center', backgroundColor: 'rgba(0,0,0,0.5)', padding: 10, borderRadius: 20 },
+  counterContainer: { backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20 },
+  counter: { color: '#fff', fontSize: 14, fontWeight: 'bold', textAlign: 'center' },
+
+  jumpOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.7)', zIndex: 100, justifyContent: 'center', alignItems: 'center' },
+  jumpBox: { backgroundColor: '#1e1e1e', padding: 20, borderRadius: 20, width: '80%', alignItems: 'center' },
+  jumpTitle: { color: '#fff', fontSize: 16, fontWeight: 'bold', marginBottom: 15 },
+  jumpInput: { backgroundColor: '#333', color: '#fff', width: '100%', padding: 12, borderRadius: 10, textAlign: 'center', fontSize: 18, marginBottom: 20 },
+  jumpButtons: { flexDirection: 'row', width: '100%', justifyContent: 'space-between', gap: 10 },
+  jumpBtnCancel: { flex: 1, backgroundColor: '#555', padding: 12, borderRadius: 10, alignItems: 'center' },
+  jumpBtnGo: { flex: 1, backgroundColor: '#3b82f6', padding: 12, borderRadius: 10, alignItems: 'center' },
+  jumpBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
 
   videoContainer: { flex: 1, backgroundColor: '#000' },
   videoTouchable: { flex: 1 },
