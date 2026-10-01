@@ -562,6 +562,7 @@ export default function App() {
             </TouchableOpacity>
           )}
         </View>
+      )}
       {/* Jump Modal */}
       {showJumpPrompt && (
         <View style={styles.jumpOverlay}>
