@@ -42,8 +42,11 @@ function ActiveVideoSlide({ item, index, activeIndex, serverIp, onDelete, uiVisi
   const [isSpeedUp, setIsSpeedUp] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [isLongPressPause, setIsLongPressPause] = useState(false);
+  const [fitMode, setFitMode] = useState('contain'); // contain = sığdır, cover = kırp
   
   const touchX = useRef(0);
+  const longPressTimer = useRef(null);
+  const isLongPressRef = useRef(false);
   
   const cleanIp = serverIp.trim();
   let serverVideoUri = '';
@@ -58,6 +61,20 @@ function ActiveVideoSlide({ item, index, activeIndex, serverIp, onDelete, uiVisi
     p.loop = true;
     p.muted = false;
   });
+
+  // Sayfa değiştiğinde pause/speed state'lerini sıfırla
+  useEffect(() => {
+    if (!isActive) {
+      setIsPaused(false);
+      setIsSpeedUp(false);
+      setIsLongPressPause(false);
+      if (longPressTimer.current) {
+        clearTimeout(longPressTimer.current);
+        longPressTimer.current = null;
+      }
+      isLongPressRef.current = false;
+    }
+  }, [isActive]);
 
   useEffect(() => {
     if (isActive && player && !isSwiping) {
@@ -86,43 +103,64 @@ function ActiveVideoSlide({ item, index, activeIndex, serverIp, onDelete, uiVisi
     if (player) player.muted = !player.muted;
   };
 
-  const handlePressIn = (e) => {
+  const toggleFit = () => {
+    setFitMode(prev => prev === 'contain' ? 'cover' : 'contain');
+  };
+
+  // Manuel dokunma yönetimi (Pressable yerine)
+  const onTouchStart = (e) => {
     touchX.current = e.nativeEvent.locationX;
-  };
-
-  const handlePress = () => {
-    setIsPaused(!isPaused);
-    setUiVisible(!uiVisible); // Ekrana tıklayınca üst/alt barı gizle/göster
-  };
-
-  const handleLongPress = () => {
-    if (!player) return;
+    isLongPressRef.current = false;
     
-    // Ekranın sağ veya sol %25'lik kısmına basılı tutulursa (2x Hız)
-    if (touchX.current > width * 0.75 || touchX.current < width * 0.25) {
-      if (!isPaused) {
-        player.playbackRate = 2.0;
-        setIsSpeedUp(true);
+    longPressTimer.current = setTimeout(() => {
+      isLongPressRef.current = true;
+      if (!player) return;
+      
+      // Kenarlardan basılı tutma = 2x hız
+      if (touchX.current > width * 0.75 || touchX.current < width * 0.25) {
+        if (!isPaused) {
+          player.playbackRate = 2.0;
+          setIsSpeedUp(true);
+        }
+      } else {
+        // Ortadan basılı tutma = dondur + UI gizle
+        setIsPaused(true);
+        setIsLongPressPause(true);
+        setUiVisible(false);
       }
+    }, 300);
+  };
+
+  const onTouchEnd = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+    
+    if (isLongPressRef.current) {
+      // Basılı tutma bitti
+      if (player) {
+        player.playbackRate = 1.0;
+        setIsSpeedUp(false);
+      }
+      if (isLongPressPause) {
+        setIsPaused(false);
+        setIsLongPressPause(false);
+        setUiVisible(true);
+      }
+      isLongPressRef.current = false;
     } else {
-      // Ortaya basılı tutulursa (Videoyu durdur ve tüm UI'yi gizle)
-      setIsPaused(true);
-      setIsLongPressPause(true);
-      setUiVisible(false); // Üst/Alt barı gizle
+      // Kısa tıklama = durdur/devam et + UI aç/kapa
+      setIsPaused(prev => !prev);
+      setUiVisible(prev => !prev);
     }
   };
 
-  const handlePressOut = () => {
-    if (player) {
-      player.playbackRate = 1.0;
-      setIsSpeedUp(false);
-    }
-    
-    // Ortaya basılı tutma bittiyse videoyu devam ettir ve UI'yi geri getir
-    if (isLongPressPause) {
-      setIsPaused(false);
-      setIsLongPressPause(false);
-      setUiVisible(true);
+  const onTouchMove = () => {
+    // Parmak hareket ettiyse long press'i iptal et (kaydırma olabilir)
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
     }
   };
 
@@ -137,18 +175,16 @@ function ActiveVideoSlide({ item, index, activeIndex, serverIp, onDelete, uiVisi
 
   return (
     <View style={styles.videoContainer}>
-      <Pressable 
+      <View 
         style={styles.videoTouchable}
-        onPressIn={handlePressIn}
-        onPress={handlePress}
-        onLongPress={handleLongPress}
-        onPressOut={handlePressOut}
-        delayLongPress={250}
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
+        onTouchMove={onTouchMove}
       >
         <VideoView
           player={player}
           style={styles.video}
-          contentFit="cover"
+          contentFit={fitMode}
           nativeControls={false}
         />
         
@@ -171,7 +207,7 @@ function ActiveVideoSlide({ item, index, activeIndex, serverIp, onDelete, uiVisi
             <Text style={styles.speedUpText}>⏩ 2x</Text>
           </View>
         )}
-      </Pressable>
+      </View>
 
       {showSlideUi && (
         <>
@@ -182,6 +218,13 @@ function ActiveVideoSlide({ item, index, activeIndex, serverIp, onDelete, uiVisi
                 <Text style={styles.iconText}>🔊</Text>
               </View>
               <Text style={styles.sideLabel}>Ses</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.sideBtn} onPress={toggleFit}>
+              <View style={[styles.iconCircle, { backgroundColor: fitMode === 'cover' ? 'rgba(59,130,246,0.7)' : 'rgba(255,255,255,0.2)' }]}>
+                <Text style={styles.iconText}>{fitMode === 'contain' ? '⛶' : '🔲'}</Text>
+              </View>
+              <Text style={styles.sideLabel}>{fitMode === 'contain' ? 'Kırp' : 'Sığdır'}</Text>
             </TouchableOpacity>
             
             {item.isLocal && (
