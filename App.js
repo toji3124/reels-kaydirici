@@ -9,6 +9,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import Slider from '@react-native-community/slider';
 import PagerView from 'react-native-pager-view';
 import { LinearGradient } from 'expo-linear-gradient';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 LogBox.ignoreLogs(['Cannot connect to Expo CLI']);
 
@@ -269,12 +270,20 @@ export default function App() {
   const [isSwiping, setIsSwiping] = useState(false);
   const [showJumpPrompt, setShowJumpPrompt] = useState(false);
   const [jumpIndex, setJumpIndex] = useState('');
+  const [savedFolderUri, setSavedFolderUri] = useState(null);
   
   const pagerRef = useRef(null);
 
   useEffect(() => {
     loadLocalVideos();
   }, [platform]);
+
+  // Kaydedilmiş klasörü yükle
+  useEffect(() => {
+    AsyncStorage.getItem('downloadFolderUri').then(uri => {
+      if (uri) setSavedFolderUri(uri);
+    });
+  }, []);
 
   const loadLocalVideos = async () => {
     try {
@@ -335,6 +344,10 @@ export default function App() {
     const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
     if (!permissions.granted) return;
 
+    // Klasörü kaydet
+    setSavedFolderUri(permissions.directoryUri);
+    await AsyncStorage.setItem('downloadFolderUri', permissions.directoryUri);
+
     setDownloading(true);
     const dir = FileSystem.documentDirectory + `reels/${platform}/`;
     let count = 0;
@@ -382,16 +395,27 @@ export default function App() {
               const igDir = FileSystem.documentDirectory + 'reels/instagram/';
               const ttDir = FileSystem.documentDirectory + 'reels/tiktok/';
               
-              const igFiles = await FileSystem.readDirectoryAsync(igDir);
-              for (const f of igFiles) await FileSystem.deleteAsync(igDir + f);
+              const igInfo = await FileSystem.getInfoAsync(igDir);
+              if (igInfo.exists) {
+                const igFiles = await FileSystem.readDirectoryAsync(igDir);
+                for (const f of igFiles) {
+                  await FileSystem.deleteAsync(igDir + f, { idempotent: true });
+                }
+              }
               
-              const ttFiles = await FileSystem.readDirectoryAsync(ttDir);
-              for (const f of ttFiles) await FileSystem.deleteAsync(ttDir + f);
+              const ttInfo = await FileSystem.getInfoAsync(ttDir);
+              if (ttInfo.exists) {
+                const ttFiles = await FileSystem.readDirectoryAsync(ttDir);
+                for (const f of ttFiles) {
+                  await FileSystem.deleteAsync(ttDir + f, { idempotent: true });
+                }
+              }
               
+              setLocalVideos([]);
               Alert.alert('Başarılı', 'Tüm offline videolar silindi!');
-              loadLocalVideos();
             } catch (err) {
-              console.log(err);
+              console.log('Silme hatası:', err);
+              Alert.alert('Hata', 'Silme sırasında bir hata oluştu.');
             }
           }
         }
@@ -407,10 +431,12 @@ export default function App() {
         { text: 'İptal', style: 'cancel' },
         { text: 'Sil', style: 'destructive', onPress: async () => {
             try {
-              await FileSystem.deleteAsync(item.uri);
-              loadLocalVideos();
+              await FileSystem.deleteAsync(item.uri, { idempotent: true });
+              setLocalVideos(prev => prev.filter(v => v.uri !== item.uri));
+              setActiveIndex(prev => Math.max(0, prev - 1));
             } catch (err) {
               console.log('Silme hatası:', err);
+              Alert.alert('Hata', 'Video silinemedi.');
             }
           }
         }
@@ -458,6 +484,27 @@ export default function App() {
           <TouchableOpacity style={styles.deleteBtn} onPress={deleteAllOffline}>
             <Text style={styles.deleteBtnText}>🗑️ Tüm Offline Videoları Temizle</Text>
           </TouchableOpacity>
+
+          {/* Klasör Ayarları */}
+          <View style={styles.folderSection}>
+            <Text style={styles.folderTitle}>📂 İndirme Klasörü</Text>
+            <Text style={styles.folderPath} numberOfLines={2}>
+              {savedFolderUri ? decodeURIComponent(savedFolderUri.replace('content://com.android.externalstorage.documents/tree/', '').replace(/%2F/g, '/').replace(/%3A/g, ':')) : 'Henüz seçilmedi'}
+            </Text>
+            <TouchableOpacity 
+              style={styles.folderBtn} 
+              onPress={async () => {
+                const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+                if (permissions.granted) {
+                  setSavedFolderUri(permissions.directoryUri);
+                  await AsyncStorage.setItem('downloadFolderUri', permissions.directoryUri);
+                  Alert.alert('Başarılı', 'Yeni indirme klasörü kaydedildi!');
+                }
+              }}
+            >
+              <Text style={styles.folderBtnText}>📁 Klasör Seç / Değiştir</Text>
+            </TouchableOpacity>
+          </View>
         </LinearGradient>
       </View>
     );
@@ -601,6 +648,11 @@ const styles = StyleSheet.create({
   offlineBtnText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
   deleteBtn: { width: '100%', padding: 16, marginTop: 40, alignItems: 'center', backgroundColor: 'rgba(239,68,68,0.1)', borderRadius: 16 },
   deleteBtnText: { color: '#ef4444', fontSize: 15, fontWeight: 'bold' },
+  folderSection: { width: '100%', marginTop: 30, backgroundColor: 'rgba(255,255,255,0.05)', padding: 16, borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+  folderTitle: { color: '#fff', fontSize: 15, fontWeight: 'bold', marginBottom: 8 },
+  folderPath: { color: '#aaa', fontSize: 13, marginBottom: 12 },
+  folderBtn: { backgroundColor: 'rgba(59,130,246,0.2)', padding: 12, borderRadius: 12, alignItems: 'center' },
+  folderBtnText: { color: '#3b82f6', fontSize: 14, fontWeight: 'bold' },
 
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 50, paddingBottom: 15, position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 },
   backBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(10px)' },
