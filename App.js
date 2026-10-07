@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   StyleSheet, Text, View, Dimensions, 
   TouchableOpacity, TextInput, ActivityIndicator, 
-  Alert, StatusBar, Pressable, LogBox 
+  Alert, StatusBar, Pressable, LogBox, Image 
 } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -387,11 +387,14 @@ export default function App() {
   const deleteAllOffline = async () => {
     Alert.alert(
       'Tümünü Sil',
-      'İndirilen TÜM videolar uygulamadan silinecek. Emin misin?',
+      'İndirilen TÜM videolar (uygulama içi + seçilen klasör) silinecek. Emin misin?',
       [
         { text: 'İptal', style: 'cancel' },
         { text: 'Evet, Sil', style: 'destructive', onPress: async () => {
             try {
+              let deletedCount = 0;
+
+              // 1) Uygulama iç dizinindeki videoları sil
               const igDir = FileSystem.documentDirectory + 'reels/instagram/';
               const ttDir = FileSystem.documentDirectory + 'reels/tiktok/';
               
@@ -400,6 +403,7 @@ export default function App() {
                 const igFiles = await FileSystem.readDirectoryAsync(igDir);
                 for (const f of igFiles) {
                   await FileSystem.deleteAsync(igDir + f, { idempotent: true });
+                  deletedCount++;
                 }
               }
               
@@ -408,11 +412,30 @@ export default function App() {
                 const ttFiles = await FileSystem.readDirectoryAsync(ttDir);
                 for (const f of ttFiles) {
                   await FileSystem.deleteAsync(ttDir + f, { idempotent: true });
+                  deletedCount++;
+                }
+              }
+
+              // 2) SAF ile seçilen klasördeki dosyaları da sil
+              const folderUri = savedFolderUri || await AsyncStorage.getItem('downloadFolderUri');
+              if (folderUri) {
+                try {
+                  const safFiles = await FileSystem.StorageAccessFramework.readDirectoryAsync(folderUri);
+                  for (const fileUri of safFiles) {
+                    try {
+                      await FileSystem.StorageAccessFramework.deleteAsync(fileUri, { idempotent: true });
+                      deletedCount++;
+                    } catch (e) {
+                      console.log('SAF dosya silme hatası:', e);
+                    }
+                  }
+                } catch (e) {
+                  console.log('SAF klasör okuma hatası:', e);
                 }
               }
               
               setLocalVideos([]);
-              Alert.alert('Başarılı', 'Tüm offline videolar silindi!');
+              Alert.alert('Başarılı', `${deletedCount} dosya silindi! (Uygulama + Klasör)`);
             } catch (err) {
               console.log('Silme hatası:', err);
               Alert.alert('Hata', 'Silme sırasında bir hata oluştu.');
@@ -456,7 +479,7 @@ export default function App() {
       <View style={styles.container}>
         <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
         <LinearGradient colors={['#1a1a2e', '#050508']} style={styles.setupContainer}>
-          <Text style={styles.setupEmoji}>📱</Text>
+          <Image source={require('./assets/logo.jpg')} style={styles.setupLogo} />
           <Text style={styles.setupTitle}>Reels Player</Text>
           
           <View style={styles.inputGroup}>
@@ -637,7 +660,7 @@ export default function App() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
   setupContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 30 },
-  setupEmoji: { fontSize: 60, marginBottom: 10 },
+  setupLogo: { width: 100, height: 100, borderRadius: 50, marginBottom: 16, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)' },
   setupTitle: { fontSize: 32, fontWeight: '800', color: '#fff', marginBottom: 40 },
   inputGroup: { width: '100%', marginBottom: 20 },
   inputLabel: { color: '#aaa', fontSize: 13, marginBottom: 8, marginLeft: 4, fontWeight: '600' },

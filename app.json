@@ -13,8 +13,8 @@
       "package": "com.reelsindirici.app",
       "usesCleartextTraffic": true,
       "adaptiveIcon": {
-        "backgroundColor": "#1A1A2E",
-        "foregroundImage": "./assets/icon.png"
+        "backgroundColor": "#000000",
+        "foregroundImage": "./assets/android-icon-foreground.png"
       }
     },
     "web": {
