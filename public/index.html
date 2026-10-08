@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reels & TikTok İndirici</title>
+    <meta name="description" content="Instagram Reels ve TikTok videolarını hızlıca indirin. Chrome eklentisi ile otomatik link toplama.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Animated background -->
+    <div class="bg-animation">
+        <div class="bg-orb bg-orb-1"></div>
+        <div class="bg-orb bg-orb-2"></div>
+        <div class="bg-orb bg-orb-3"></div>
+    </div>
+
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">
+                <div class="logo-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                    </svg>
+                </div>
+                <div class="logo-text">
+                    <h1>Reels & TikTok İndirici</h1>
+                    <p class="logo-subtitle">Otomatik Link Toplama & Video İndirme</p>
+                </div>
+            </div>
+            <div class="header-badges" style="display: flex; gap: 8px; align-items: center;">
+                <div class="header-badge badge-ig">
+                    <span class="badge-dot"></span>
+                    <span>Instagram</span>
+                </div>
+                <div class="header-badge badge-tt">
+                    <span class="badge-dot dot-pink"></span>
+                    <span>TikTok</span>
+                </div>
+                <button id="showQrBtn" class="btn btn-sm btn-accent" style="margin-left: 10px; padding: 0.35rem 0.8rem; font-size: 0.75rem;">
+                    📱 Telefondan Bağlan
+                </button>
+                <a href="/player.html" class="btn btn-sm btn-primary" style="padding: 0.35rem 0.8rem; font-size: 0.75rem; text-decoration: none;">
+                    ▶ Reels Player
+                </a>
+            </div>
+        </header>
+
+        <!-- Tabs -->
+        <nav class="tabs">
+            <button class="tab active" data-tab="manual" id="tabManual">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                Manuel Link Girişi
+            </button>
+            <button class="tab" data-tab="collected" id="tabCollected">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>
+                Toplanan Linkler
+                <span class="tab-badge" id="collectedBadge" style="display:none;">0</span>
+            </button>
+            <button class="tab" data-tab="downloaded" id="tabDownloaded">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                İndirilenler
+            </button>
+        </nav>
+
+        <main class="main-content">
+            <!-- ========== TAB: Manuel Link Girişi ========== -->
+            <section class="tab-content active" id="panelManual">
+                <div class="input-card glass-card">
+                    <div class="card-header">
+                        <div class="card-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                        </div>
+                        <div>
+                            <h2>Linkleri Yapıştır</h2>
+                            <p>Instagram Reels veya TikTok linklerini yapıştırın (her satıra bir link, maks. 1000)</p>
+                        </div>
+                    </div>
+
+                    <div class="textarea-wrapper">
+                        <textarea id="linksInput" placeholder="https://www.instagram.com/reel/ABC123...&#10;https://www.tiktok.com/@user/video/123456...&#10;https://www.instagram.com/reel/DEF456..." spellcheck="false"></textarea>
+                        <div class="textarea-counter">
+                            <span id="linkCount">0</span> / 1000 link
+                        </div>
+                    </div>
+
+                    <div class="action-bar">
+                        <button class="btn btn-secondary" id="clearBtn">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                            Temizle
+                        </button>
+                        <button class="btn btn-secondary" id="pasteBtn">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                            Yapıştır
+                        </button>
+                        
+                        <div style="display: flex; align-items: center; gap: 8px; margin-left: auto; margin-right: 15px; color: var(--text-muted); font-size: 14px;">
+                            Eşzamanlı İndirme: 
+                            <input type="number" id="parallelLimitInput" value="25" min="1" max="50" style="width: 50px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); color: white; border-radius: 4px; padding: 4px; text-align: center;">
+                        </div>
+                        <button class="btn btn-danger" id="cancelBtn" style="display:none;">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+                            İptal
+                        </button>
+                        <button class="btn btn-primary" id="processBtn">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                            <span id="processBtnText">İndir</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Progress -->
+                <div class="progress-section" id="progressSection" style="display:none;">
+                    <div class="progress-card glass-card">
+                        <div class="progress-header">
+                            <span class="progress-label" id="progressLabel">İndiriliyor...</span>
+                            <span class="progress-percentage" id="progressPercentage">0%</span>
+                        </div>
+                        <div class="progress-bar-track">
+                            <div class="progress-bar-fill" id="progressBar"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Results -->
+                <div class="results-section" id="resultsSection" style="display:none;">
+                    <div class="results-header">
+                        <h2>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
+                            Sonuçlar
+                        </h2>
+                        <div class="results-stats">
+                            <span class="stat stat-success" id="successCount">0 başarılı</span>
+                            <span class="stat stat-fail" id="failCount">0 başarısız</span>
+                        </div>
+                    </div>
+                    <div class="results-grid" id="resultsGrid"></div>
+                </div>
+            </section>
+
+            <!-- ========== TAB: Toplanan Linkler ========== -->
+            <section class="tab-content" id="panelCollected">
+                <div class="glass-card" style="padding: 2rem;">
+                    <div class="card-header">
+                        <div class="card-icon icon-bookmark">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>
+                        </div>
+                        <div>
+                            <h2>Chrome Eklentisinden Toplanan Linkler</h2>
+                            <p>Eklenti ile Instagram ve TikTok'ta gezinirken otomatik toplanan linkler</p>
+                        </div>
+                    </div>
+
+                    <div class="collected-actions">
+                        <button class="btn btn-secondary" id="refreshLinksBtn">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+                            Yenile
+                        </button>
+                        
+                        <div style="display: flex; gap: 5px; margin-left: auto;">
+                            <button class="btn btn-secondary" id="selectAllBtn" style="font-size: 12px; padding: 6px 12px; display: none;">Tümünü Seç</button>
+                            <button class="btn btn-secondary" id="selectIgBtn" style="font-size: 12px; padding: 6px 12px; display: none;">Sadece IG</button>
+                            <button class="btn btn-secondary" id="selectTtBtn" style="font-size: 12px; padding: 6px 12px; display: none;">Sadece TT</button>
+                        </div>
+                        
+                        <button class="btn btn-accent" id="downloadCollectedBtn" style="display:none; margin-left: 10px;">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                            Seçilenleri İndir
+                        </button>
+                        <button class="btn btn-danger" id="clearLinksBtn" style="display:none;">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                            Tümünü Sil
+                        </button>
+                    </div>
+
+                    <div class="collected-list" id="collectedList">
+                        <div class="empty-state">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:48px;height:48px;color:var(--text-muted);">
+                                <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+                            </svg>
+                            <p>Henüz toplanan link yok</p>
+                            <span>Chrome eklentisini yükleyip Instagram veya TikTok'ta gezinmeye başlayın</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ========== TAB: İndirilenler ========== -->
+            <section class="tab-content" id="panelDownloaded">
+                <div class="glass-card" style="padding: 2rem;">
+                    <div class="card-header" style="justify-content: space-between; display: flex;">
+                        <div style="display: flex; gap: 1rem; align-items: flex-start;">
+                            <div class="card-icon icon-download">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                            </div>
+                            <div>
+                                <h2>İndirilmiş Videolar</h2>
+                                <p>Tüm videolarınız /downloads klasörüne otomatik kaydedilir.</p>
+                            </div>
+                        </div>
+                        <button class="btn btn-secondary" id="openFolderBtn">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                            Klasörü Aç
+                        </button>
+                    </div>
+
+                    <div class="downloaded-list" id="downloadedList">
+                        <div class="empty-state">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:48px;height:48px;color:var(--text-muted);">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line>
+                            </svg>
+                            <p>Henüz indirilmiş video yok</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Extension Install Banner -->
+        <div class="extension-banner glass-card" id="extensionBanner">
+            <div class="extension-info">
+                <div class="extension-icon">🧩</div>
+                <div>
+                    <strong>Chrome Eklentisi</strong>
+                    <p>Otomatik link toplama için <code>extension/</code> klasörünü Chrome'a yükleyin</p>
+                </div>
+            </div>
+            <button class="btn btn-secondary btn-sm" onclick="document.getElementById('extensionBanner').style.display='none'">Kapat</button>
+        </div>
+
+        <footer class="footer">
+            <p>Reels & TikTok İndirici &bull; yt-dlp ile güçlendirildi &bull; Kişisel kullanım</p>
+        </footer>
+    </div>
+
+    <!-- QR Modal -->
+    <div id="qrModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center; backdrop-filter: blur(10px);">
+        <div class="glass-card" style="padding: 2rem; text-align: center; max-width: 350px; position: relative;">
+            <button id="closeQrBtn" style="position: absolute; top: 10px; right: 15px; background: none; border: none; color: white; font-size: 20px; cursor: pointer;">&times;</button>
+            <h3 style="margin-bottom: 15px;">Telefondan Bağlan</h3>
+            <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 20px;">Aynı Wi-Fi ağına bağlıyken telefonunun kamerasıyla bu kodu okut:</p>
+            <div id="qrContainer" style="background: white; padding: 15px; border-radius: 10px; display: inline-block;">
+                <img id="qrImage" src="" alt="QR Code" style="width: 200px; height: 200px;">
+            </div>
+            <p style="font-size: 12px; color: var(--text-muted); margin-top: 20px;">Ya da tarayıcıya şunu yaz:<br><strong id="ipText" style="color: white; font-size: 14px; user-select: all;"></strong></p>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

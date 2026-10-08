@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#0a0a0f">
+    <title>Reels Player</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        :root {
+            --bg: #0a0a0f;
+            --card: rgba(255,255,255,0.06);
+            --border: rgba(255,255,255,0.08);
+            --text: #ffffff;
+            --text-dim: rgba(255,255,255,0.5);
+            --accent-ig: #E1306C;
+            --accent-tt: #00f2ea;
+            --accent-purple: #8b5cf6;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: var(--bg);
+            font-family: 'Inter', sans-serif;
+            color: var(--text);
+            -webkit-user-select: none;
+            user-select: none;
+            touch-action: none;
+        }
+
+        /* ===== TOP NAV ===== */
+        .top-nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 12px 16px;
+            padding-top: max(12px, env(safe-area-inset-top));
+            background: linear-gradient(to bottom, rgba(0,0,0,0.8) 0%, transparent 100%);
+        }
+
+        .nav-tabs {
+            display: flex;
+            gap: 0;
+            background: rgba(255,255,255,0.08);
+            border-radius: 25px;
+            padding: 3px;
+        }
+
+        .nav-tab {
+            padding: 8px 20px;
+            border: none;
+            border-radius: 22px;
+            background: none;
+            color: var(--text-dim);
+            font-family: 'Inter', sans-serif;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .nav-tab.active {
+            background: rgba(255,255,255,0.15);
+            color: white;
+        }
+
+        .nav-tab .tab-count {
+            background: rgba(255,255,255,0.15);
+            padding: 1px 7px;
+            border-radius: 10px;
+            font-size: 11px;
+        }
+
+        .nav-tab.active.ig { background: var(--accent-ig); }
+        .nav-tab.active.tt { background: var(--accent-tt); color: #000; }
+
+        .back-btn {
+            position: absolute;
+            left: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border: none;
+            background: rgba(255,255,255,0.1);
+            color: white;
+            font-size: 18px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-decoration: none;
+        }
+
+        /* ===== VIDEO FEED ===== */
+        .feed-container {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .video-slide {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #000;
+            transition: transform 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+        }
+
+        .video-slide video {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            background: #000;
+        }
+
+        /* ===== SIDE ACTIONS ===== */
+        .side-actions {
+            position: absolute;
+            right: 12px;
+            bottom: 120px;
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+            z-index: 50;
+        }
+
+        .side-btn {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            cursor: pointer;
+        }
+
+        .side-btn .icon-circle {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: rgba(0,0,0,0.4);
+            backdrop-filter: blur(10px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .side-btn svg {
+            width: 22px;
+            height: 22px;
+            stroke: white;
+            fill: none;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .side-btn .label {
+            font-size: 10px;
+            color: rgba(255,255,255,0.8);
+            font-weight: 500;
+        }
+
+        /* ===== BOTTOM INFO ===== */
+        .video-info {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 20px 16px;
+            padding-bottom: max(20px, env(safe-area-inset-bottom));
+            background: linear-gradient(to top, rgba(0,0,0,0.7) 0%, transparent 100%);
+            z-index: 40;
+        }
+
+        .video-info .platform-badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .badge-ig { background: var(--accent-ig); }
+        .badge-tt { background: var(--accent-tt); color: #000; }
+
+        .video-info .video-name {
+            font-size: 13px;
+            font-weight: 500;
+            opacity: 0.9;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .video-info .video-counter {
+            font-size: 12px;
+            opacity: 0.5;
+            margin-top: 4px;
+        }
+
+        /* ===== EMPTY STATE ===== */
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            gap: 16px;
+            color: var(--text-dim);
+            padding: 40px;
+            text-align: center;
+        }
+
+        .empty-state .empty-icon {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.05);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 36px;
+        }
+
+        .empty-state h3 { font-size: 18px; color: white; }
+        .empty-state p { font-size: 13px; line-height: 1.5; }
+
+        /* ===== LOADING ===== */
+        .loading-overlay {
+            position: fixed;
+            inset: 0;
+            background: var(--bg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 200;
+            transition: opacity 0.3s;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(255,255,255,0.1);
+            border-top-color: var(--accent-purple);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ===== DOWNLOAD ALL BAR ===== */
+        .download-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 12px 16px;
+            padding-bottom: max(12px, env(safe-area-inset-bottom));
+            background: rgba(10,10,15,0.95);
+            backdrop-filter: blur(20px);
+            border-top: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            z-index: 90;
+        }
+
+        .download-bar .info {
+            font-size: 12px;
+            color: var(--text-dim);
+        }
+
+        .download-bar .info strong {
+            color: white;
+            font-size: 14px;
+        }
+
+        .dl-all-btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 20px;
+            background: linear-gradient(135deg, var(--accent-purple), var(--accent-ig));
+            color: white;
+            font-family: 'Inter', sans-serif;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .dl-all-btn:active { transform: scale(0.95); }
+
+        /* ===== PROGRESS TOAST ===== */
+        .progress-toast {
+            position: fixed;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.85);
+            backdrop-filter: blur(15px);
+            border: 1px solid var(--border);
+            padding: 12px 20px;
+            border-radius: 16px;
+            z-index: 200;
+            font-size: 13px;
+            display: none;
+            min-width: 200px;
+            text-align: center;
+        }
+
+        .progress-toast .progress-track {
+            height: 4px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 2px;
+            margin-top: 8px;
+            overflow: hidden;
+        }
+
+        .progress-toast .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent-purple), var(--accent-ig));
+            border-radius: 2px;
+            width: 0%;
+            transition: width 0.3s;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Loading -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="spinner"></div>
+    </div>
+
+    <!-- Top Nav -->
+    <nav class="top-nav">
+        <a href="/" class="back-btn">←</a>
+        <div class="nav-tabs">
+            <button class="nav-tab ig active" data-platform="instagram" id="tabIg">
+                📸 Insta <span class="tab-count" id="countIg">0</span>
+            </button>
+            <button class="nav-tab tt" data-platform="tiktok" id="tabTt">
+                🎵 TikTok <span class="tab-count" id="countTt">0</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Feed -->
+    <div class="feed-container" id="feedContainer"></div>
+
+    <!-- Download Bar -->
+    <div class="download-bar" id="downloadBar" style="display: none;">
+        <div class="info">
+            <strong id="totalVideos">0</strong> video<br>
+            Tümünü telefonuna kaydet
+        </div>
+        <button class="dl-all-btn" id="dlAllBtn">
+            📥 Tümünü İndir
+        </button>
+    </div>
+
+    <!-- Progress Toast -->
+    <div class="progress-toast" id="progressToast">
+        <span id="progressText">İndiriliyor...</span>
+        <div class="progress-track">
+            <div class="progress-fill" id="progressFill"></div>
+        </div>
+    </div>
+
+    <script>
+        // State
+        let videos = { instagram: [], tiktok: [] };
+        let currentPlatform = 'instagram';
+        let currentIndex = 0;
+        let startY = 0;
+        let currentY = 0;
+        let isDragging = false;
+
+        // DOM
+        const feedContainer = document.getElementById('feedContainer');
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        const downloadBar = document.getElementById('downloadBar');
+        const totalVideosEl = document.getElementById('totalVideos');
+        const dlAllBtn = document.getElementById('dlAllBtn');
+        const progressToast = document.getElementById('progressToast');
+        const progressText = document.getElementById('progressText');
+        const progressFill = document.getElementById('progressFill');
+
+        // Fetch videos
+        async function fetchVideos() {
+            try {
+                const res = await fetch('/api/files');
+                const data = await res.json();
+                const files = data.files || [];
+
+                videos.instagram = files.filter(f => f.platform === 'instagram' || f.name.includes('reels'));
+                videos.tiktok = files.filter(f => f.platform === 'tiktok' || f.name.includes('tiktok'));
+
+                document.getElementById('countIg').textContent = videos.instagram.length;
+                document.getElementById('countTt').textContent = videos.tiktok.length;
+
+                renderFeed();
+            } catch (err) {
+                console.error('Video fetch error:', err);
+            } finally {
+                loadingOverlay.style.opacity = '0';
+                setTimeout(() => loadingOverlay.style.display = 'none', 300);
+            }
+        }
+
+        // Render feed
+        function renderFeed() {
+            const list = videos[currentPlatform];
+            feedContainer.innerHTML = '';
+            currentIndex = 0;
+
+            if (list.length === 0) {
+                feedContainer.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">${currentPlatform === 'instagram' ? '📸' : '🎵'}</div>
+                        <h3>Henüz video yok</h3>
+                        <p>Bilgisayardan ${currentPlatform === 'instagram' ? 'Instagram Reels' : 'TikTok'} videoları indirdiğinde burada görünecek</p>
+                    </div>
+                `;
+                downloadBar.style.display = 'none';
+                return;
+            }
+
+            totalVideosEl.textContent = list.length;
+            downloadBar.style.display = 'flex';
+
+            // Create slides
+            list.forEach((file, i) => {
+                const slide = document.createElement('div');
+                slide.className = 'video-slide';
+                slide.style.transform = `translateY(${i * 100}%)`;
+                slide.dataset.index = i;
+
+                const isIg = currentPlatform === 'instagram';
+                const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+
+                slide.innerHTML = `
+                    <video src="${file.path}" playsinline webkit-playsinline preload="metadata" loop ${i === 0 ? 'autoplay muted' : ''}></video>
+                    
+                    <div class="side-actions">
+                        <div class="side-btn" onclick="downloadSingle(${i})">
+                            <div class="icon-circle">
+                                <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                            </div>
+                            <span class="label">Kaydet</span>
+                        </div>
+                        <div class="side-btn" onclick="toggleMute(${i})">
+                            <div class="icon-circle" id="muteIcon${i}">
+                                <svg viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+                            </div>
+                            <span class="label">Ses</span>
+                        </div>
+                    </div>
+
+                    <div class="video-info">
+                        <span class="platform-badge ${isIg ? 'badge-ig' : 'badge-tt'}">${isIg ? 'Instagram' : 'TikTok'}</span>
+                        <div class="video-name">${file.name}</div>
+                        <div class="video-counter">${i + 1} / ${list.length} • ${sizeMB} MB</div>
+                    </div>
+                `;
+
+                feedContainer.appendChild(slide);
+            });
+
+            // Setup touch
+            setupTouch();
+        }
+
+        // Touch / Swipe
+        function setupTouch() {
+            feedContainer.addEventListener('touchstart', onTouchStart, { passive: true });
+            feedContainer.addEventListener('touchmove', onTouchMove, { passive: true });
+            feedContainer.addEventListener('touchend', onTouchEnd, { passive: true });
+            
+            // Mouse support for desktop testing
+            feedContainer.addEventListener('mousedown', (e) => { onTouchStart({ touches: [{ clientY: e.clientY }] }); });
+            feedContainer.addEventListener('mousemove', (e) => { if (isDragging) onTouchMove({ touches: [{ clientY: e.clientY }] }); });
+            feedContainer.addEventListener('mouseup', (e) => { onTouchEnd(); });
+        }
+
+        function onTouchStart(e) {
+            startY = e.touches[0].clientY;
+            isDragging = true;
+        }
+
+        function onTouchMove(e) {
+            if (!isDragging) return;
+            currentY = e.touches[0].clientY;
+            const diff = currentY - startY;
+            
+            const slides = feedContainer.querySelectorAll('.video-slide');
+            slides.forEach((slide, i) => {
+                const offset = (i - currentIndex) * 100;
+                const dragPercent = (diff / window.innerHeight) * 100;
+                slide.style.transition = 'none';
+                slide.style.transform = `translateY(${offset + dragPercent}%)`;
+            });
+        }
+
+        function onTouchEnd() {
+            if (!isDragging) return;
+            isDragging = false;
+
+            const diff = currentY - startY;
+            const threshold = window.innerHeight * 0.15;
+            const list = videos[currentPlatform];
+
+            if (diff < -threshold && currentIndex < list.length - 1) {
+                currentIndex++;
+            } else if (diff > threshold && currentIndex > 0) {
+                currentIndex--;
+            }
+
+            goToSlide(currentIndex);
+        }
+
+        function goToSlide(index) {
+            const slides = feedContainer.querySelectorAll('.video-slide');
+            
+            slides.forEach((slide, i) => {
+                slide.style.transition = 'transform 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
+                slide.style.transform = `translateY(${(i - index) * 100}%)`;
+
+                const video = slide.querySelector('video');
+                if (i === index) {
+                    video.currentTime = 0;
+                    video.play().catch(() => {});
+                } else {
+                    video.pause();
+                }
+            });
+        }
+
+        // Tap to play/pause
+        feedContainer.addEventListener('click', (e) => {
+            if (e.target.closest('.side-btn') || e.target.closest('.side-actions')) return;
+            const slides = feedContainer.querySelectorAll('.video-slide');
+            const video = slides[currentIndex]?.querySelector('video');
+            if (video) {
+                video.paused ? video.play() : video.pause();
+            }
+        });
+
+        // Toggle mute
+        function toggleMute(index) {
+            const slides = feedContainer.querySelectorAll('.video-slide');
+            const video = slides[index]?.querySelector('video');
+            if (video) {
+                video.muted = !video.muted;
+                const icon = document.getElementById(`muteIcon${index}`);
+                if (video.muted) {
+                    icon.innerHTML = `<svg viewBox="0 0 24 24" stroke="white" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>`;
+                } else {
+                    icon.innerHTML = `<svg viewBox="0 0 24 24" stroke="white" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>`;
+                }
+            }
+        }
+
+        // Download single
+        function downloadSingle(index) {
+            const list = videos[currentPlatform];
+            const file = list[index];
+            const a = document.createElement('a');
+            a.href = file.path;
+            a.download = file.name;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+        }
+
+        // Download all
+        dlAllBtn.addEventListener('click', async () => {
+            const list = videos[currentPlatform];
+            if (list.length === 0) return;
+
+            progressToast.style.display = 'block';
+            dlAllBtn.disabled = true;
+            dlAllBtn.textContent = 'İndiriliyor...';
+
+            for (let i = 0; i < list.length; i++) {
+                progressText.textContent = `${i + 1} / ${list.length} indiriliyor...`;
+                progressFill.style.width = `${((i + 1) / list.length) * 100}%`;
+
+                const a = document.createElement('a');
+                a.href = list[i].path;
+                a.download = list[i].name;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+
+                // Tarayıcının nefes alması için kısa bekleme
+                await new Promise(r => setTimeout(r, 500));
+            }
+
+            progressText.textContent = `✅ ${list.length} video indirildi!`;
+            progressFill.style.width = '100%';
+
+            setTimeout(() => {
+                progressToast.style.display = 'none';
+                progressFill.style.width = '0%';
+                dlAllBtn.disabled = false;
+                dlAllBtn.textContent = '📥 Tümünü İndir';
+            }, 2000);
+        });
+
+        // Tab switching
+        document.getElementById('tabIg').addEventListener('click', () => {
+            if (currentPlatform === 'instagram') return;
+            currentPlatform = 'instagram';
+            document.getElementById('tabIg').classList.add('active');
+            document.getElementById('tabTt').classList.remove('active');
+            renderFeed();
+        });
+
+        document.getElementById('tabTt').addEventListener('click', () => {
+            if (currentPlatform === 'tiktok') return;
+            currentPlatform = 'tiktok';
+            document.getElementById('tabTt').classList.add('active');
+            document.getElementById('tabIg').classList.remove('active');
+            renderFeed();
+        });
+
+        // Init
+        fetchVideos();
+    </script>
+</body>
+</html>

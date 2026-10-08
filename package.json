@@ -11,12 +11,14 @@
     "expo-linear-gradient": "~57.0.2",
     "expo-status-bar": "~57.0.1",
     "expo-video": "~57.0.5",
+    "express": "^4.19.2",
     "react": "19.2.3",
     "react-native": "0.86.3",
     "react-native-pager-view": "8.0.2"
   },
   "scripts": {
-    "start": "expo start",
+    "start": "node server.js",
+    "expo": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web"
