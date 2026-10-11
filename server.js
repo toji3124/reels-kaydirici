@@ -284,24 +284,45 @@ app.get('/api/open-folder', (req, res) => {
 });
 
 // Bilgisayarın yerel IP adresini bul (Telefonun bağlanabilmesi için)
-app.get('/api/local-ip', (req, res) => {
+function getLocalIps() {
     const interfaces = os.networkInterfaces();
-    let localIp = 'localhost';
+    const ips = [];
     
     for (const devName in interfaces) {
+        const isVirtual = /virtual|vmware|vbox|vethernet|host-only/i.test(devName);
         const iface = interfaces[devName];
+        
         for (let i = 0; i < iface.length; i++) {
             const alias = iface[i];
             if (alias.family === 'IPv4' && alias.address !== '127.0.0.1' && !alias.internal) {
-                localIp = alias.address;
-                break;
+                if (alias.address.startsWith('192.168.56.')) continue;
+                ips.push({ name: devName, address: alias.address, isVirtual });
             }
         }
     }
-    res.json({ ip: localIp, port: PORT, url: `http://${localIp}:${PORT}` });
+    
+    ips.sort((a, b) => {
+        if (a.isVirtual !== b.isVirtual) return a.isVirtual ? 1 : -1;
+        if (a.address.startsWith('192.168.1.') && !b.address.startsWith('192.168.1.')) return -1;
+        return 0;
+    });
+    
+    return ips;
+}
+
+app.get('/api/local-ip', (req, res) => {
+    const ips = getLocalIps();
+    const bestIp = ips.length > 0 ? ips[0].address : 'localhost';
+    res.json({ ip: bestIp, allIps: ips.map(i => i.address), port: PORT, url: `http://${bestIp}:${PORT}` });
 });
 
 app.listen(PORT, '0.0.0.0', () => {
+    const ips = getLocalIps();
+    const bestIp = ips.length > 0 ? ips[0].address : 'localhost';
     console.log(`\n🎬 Reels & TikTok İndirici çalışıyor: http://localhost:${PORT}`);
-    console.log(`📱 Telefondan bağlanmak için aynı Wi-Fi üzerinden şu adrese girin: http://<Senin-IP-Adresin>:${PORT}\n`);
+    console.log(`📱 Telefondan bağlanmak için şu IP'yi girin: http://${bestIp}:${PORT}`);
+    if (ips.length > 1) {
+        console.log(`ℹ️ Diğer ağ adresleri: ${ips.slice(1).map(i => i.address).join(', ')}`);
+    }
+    console.log('');
 });
