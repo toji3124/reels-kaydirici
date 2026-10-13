@@ -293,10 +293,16 @@ function ActiveVideoSlide({ item, index, activeIndex, serverIp, onDelete, uiVisi
 }
 
 // ============================================
-// YOUTUBE HUB (AYRI GENİŞ EKRAN GALERİ)
+// YOUTUBE HUB (GELİŞMİŞ YOUTUBE OYNATICI & GALERİ)
 // ============================================
 function YouTubeHub({ list, serverIp, onBack, onDelete }) {
   const [selectedVideo, setSelectedVideo] = useState(list.length > 0 ? list[0] : null);
+  const [isPaused, setIsPaused] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1);
+  const [controlsVisible, setControlsVisible] = useState(true);
+  const controlsTimeout = useRef(null);
   const videoViewRef = useRef(null);
 
   useEffect(() => {
@@ -317,15 +323,74 @@ function YouTubeHub({ list, serverIp, onBack, onDelete }) {
   const videoUri = selectedVideo ? (selectedVideo.isLocal ? selectedVideo.uri : serverVideoUri) : '';
 
   const player = useVideoPlayer(videoUri, p => {
-    p.loop = true;
+    p.loop = false;
     p.muted = false;
   });
 
   useEffect(() => {
     if (player && selectedVideo) {
       player.play();
+      setIsPaused(false);
+      resetControlsTimer();
     }
   }, [selectedVideo, player]);
+
+  // Canlı süre ve ilerleme güncellemesi
+  useEffect(() => {
+    let interval;
+    if (player && selectedVideo) {
+      interval = setInterval(() => {
+        setProgress(player.currentTime || 0);
+        if (player.duration) setDuration(player.duration);
+      }, 300);
+    }
+    return () => clearInterval(interval);
+  }, [player, selectedVideo]);
+
+  const resetControlsTimer = () => {
+    if (controlsTimeout.current) clearTimeout(controlsTimeout.current);
+    setControlsVisible(true);
+    controlsTimeout.current = setTimeout(() => {
+      setControlsVisible(false);
+    }, 4000);
+  };
+
+  const togglePlayPause = () => {
+    if (!player) return;
+    if (isPaused) {
+      player.play();
+      setIsPaused(false);
+    } else {
+      player.pause();
+      setIsPaused(true);
+    }
+    resetControlsTimer();
+  };
+
+  const skipSeconds = (sec) => {
+    if (!player) return;
+    const newTime = Math.max(0, Math.min(duration || 0, (player.currentTime || 0) + sec));
+    player.currentTime = newTime;
+    setProgress(newTime);
+    resetControlsTimer();
+  };
+
+  const handleSeek = (val) => {
+    if (!player) return;
+    player.currentTime = val;
+    setProgress(val);
+    resetControlsTimer();
+  };
+
+  const cycleSpeed = () => {
+    if (!player) return;
+    const speeds = [1, 1.25, 1.5, 2];
+    const nextIdx = (speeds.indexOf(playbackSpeed) + 1) % speeds.length;
+    const next = speeds[nextIdx];
+    player.playbackRate = next;
+    setPlaybackSpeed(next);
+    resetControlsTimer();
+  };
 
   const toggleFullscreen = () => {
     if (videoViewRef.current) videoViewRef.current.enterFullscreen();
@@ -336,9 +401,9 @@ function YouTubeHub({ list, serverIp, onBack, onDelete }) {
       {/* Üst Bar: Geri Dön Butonu ve Başlık */}
       <View style={styles.ytHeaderBar}>
         <TouchableOpacity onPress={onBack} style={styles.ytBackBtn}>
-          <Text style={styles.ytBackBtnText}>Geri</Text>
+          <Text style={styles.ytBackBtnText}>← Geri</Text>
         </TouchableOpacity>
-        <Text style={styles.ytHeaderTitle}>YouTube Stüdyo</Text>
+        <Text style={styles.ytHeaderTitle}>YouTube Oynatıcı</Text>
         <View style={styles.ytCountBadge}>
           <Text style={styles.ytCountText}>{list.length}</Text>
         </View>
@@ -347,28 +412,84 @@ function YouTubeHub({ list, serverIp, onBack, onDelete }) {
       {/* 16:9 YouTube Video Oynatıcı */}
       {selectedVideo ? (
         <View style={styles.ytPlayerSection}>
-          <View style={styles.ytVideoWrapper}>
+          <Pressable 
+            style={styles.ytVideoWrapper} 
+            onPress={() => {
+              if (controlsVisible) {
+                setControlsVisible(false);
+              } else {
+                resetControlsTimer();
+              }
+            }}
+          >
             <VideoView
               ref={videoViewRef}
               player={player}
               style={styles.ytVideoView}
               contentFit="contain"
-              nativeControls={true}
+              nativeControls={false}
             />
-          </View>
+
+            {/* Custom Interactive Controls Overlay */}
+            {controlsVisible && (
+              <View style={styles.ytControlsOverlay} pointerEvents="box-none">
+                {/* Center Controls: -10s, Play/Pause, +10s */}
+                <View style={styles.ytCenterControlsRow}>
+                  <TouchableOpacity style={styles.ytControlBtn} onPress={() => skipSeconds(-10)}>
+                    <Text style={styles.ytControlBtnText}>-10s</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity style={styles.ytPlayPauseBtn} onPress={togglePlayPause}>
+                    <Text style={styles.ytPlayPauseText}>{isPaused ? '▶' : '⏸'}</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.ytControlBtn} onPress={() => skipSeconds(10)}>
+                    <Text style={styles.ytControlBtnText}>+10s</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Bottom Scrubber & Buttons */}
+                <View style={styles.ytBottomBar}>
+                  <View style={styles.ytTimelineRow}>
+                    <Text style={styles.ytTimeText}>{formatTime(progress)}</Text>
+                    <Slider
+                      style={{ flex: 1, height: 30 }}
+                      minimumValue={0}
+                      maximumValue={duration > 0 ? duration : 1}
+                      value={progress}
+                      onValueChange={handleSeek}
+                      minimumTrackTintColor="#ef4444"
+                      maximumTrackTintColor="rgba(255,255,255,0.3)"
+                      thumbTintColor="#ef4444"
+                    />
+                    <Text style={styles.ytTimeText}>{formatTime(duration)}</Text>
+                  </View>
+
+                  <View style={styles.ytQuickActionsRow}>
+                    <TouchableOpacity style={styles.ytSpeedBtn} onPress={cycleSpeed}>
+                      <Text style={styles.ytSpeedBtnText}>⚡ {playbackSpeed}x</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.ytSpeedBtn} onPress={toggleFullscreen}>
+                      <Text style={styles.ytSpeedBtnText}>⛶ Tam Ekran</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            )}
+          </Pressable>
+
+          {/* Video Başlığı & Meta */}
           <View style={styles.ytPlayerMeta}>
             <View style={{ flex: 1 }}>
               <Text style={styles.ytActiveTitle} numberOfLines={2}>
                 {selectedVideo.name.replace('.mp4', '')}
               </Text>
               <Text style={styles.ytActiveSub}>
+                {selectedVideo.uploader && selectedVideo.uploader !== 'Genel' ? `@${selectedVideo.uploader} • ` : ''}
                 {selectedVideo.isLocal ? 'Offline' : 'Sunucu'}
                 {selectedVideo.size ? ` • ${(selectedVideo.size / (1024*1024)).toFixed(1)} MB` : ''}
               </Text>
             </View>
-            <TouchableOpacity style={styles.ytFullscreenBtn} onPress={toggleFullscreen}>
-              <Text style={{ fontSize: 13, color: '#fff', fontWeight: 'bold' }}>TAM</Text>
-            </TouchableOpacity>
           </View>
         </View>
       ) : (
@@ -377,7 +498,7 @@ function YouTubeHub({ list, serverIp, onBack, onDelete }) {
         </View>
       )}
 
-      {/* Video Kartları Galerisi */}
+      {/* Video Kartları Galerisi (Gerçek Kapak Resimleri ile) */}
       <ScrollView style={styles.ytScrollView} contentContainerStyle={styles.ytScrollContent}>
         {list.length === 0 ? (
           <View style={{ padding: 40, alignItems: 'center' }}>
@@ -387,6 +508,9 @@ function YouTubeHub({ list, serverIp, onBack, onDelete }) {
           list.map((item, idx) => {
             const isPlaying = selectedVideo && selectedVideo.name === item.name;
             const sizeMb = item.size ? `${(item.size / (1024 * 1024)).toFixed(1)} MB` : '';
+            const thumbPath = item.thumbnail || `/api/thumbnail/${item.platform || 'youtube'}/${item.name}`;
+            const thumbUri = cleanIp.startsWith('http') ? `${cleanIp}${thumbPath}` : `http://${cleanIp}:3000${thumbPath}`;
+
             return (
               <TouchableOpacity
                 key={item.name + idx}
@@ -394,14 +518,15 @@ function YouTubeHub({ list, serverIp, onBack, onDelete }) {
                 onPress={() => setSelectedVideo(item)}
                 activeOpacity={0.8}
               >
-                {/* 16:9 Thumbnail Önizleme Kutusu */}
+                {/* 16:9 Gerçek Thumbnail Önizleme Kutusu */}
                 <View style={styles.ytThumbnailBox}>
-                  <LinearGradient
-                    colors={['#2a1215', '#151520']}
-                    style={StyleSheet.absoluteFill}
+                  <Image 
+                    source={{ uri: thumbUri }} 
+                    style={StyleSheet.absoluteFill} 
+                    resizeMode="cover" 
                   />
                   <View style={styles.ytPlayIconBadge}>
-                    <Text style={{ color: '#fff', fontSize: 13 }}>{'>'}</Text>
+                    <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>▶</Text>
                   </View>
                   <View style={styles.ytBadgeDuration}>
                     <Text style={{ color: '#fff', fontSize: 9, fontWeight: 'bold' }}>HD</Text>
@@ -414,7 +539,7 @@ function YouTubeHub({ list, serverIp, onBack, onDelete }) {
                     {item.name.replace('.mp4', '')}
                   </Text>
                   <View style={styles.ytCardMetaRow}>
-                    <Text style={styles.ytCardSize}>{sizeMb || 'Video'}</Text>
+                    <Text style={styles.ytCardSize}>{item.uploader ? `@${item.uploader} • ` : ''}{sizeMb || 'Video'}</Text>
                     {isPlaying && (
                       <View style={styles.ytNowPlayingBadge}>
                         <Text style={styles.ytNowPlayingText}>Oynatılıyor</Text>
@@ -1060,8 +1185,20 @@ const styles = StyleSheet.create({
   ytCountText: { color: '#fff', fontSize: 11, fontWeight: 'bold' },
 
   ytPlayerSection: { backgroundColor: '#000', borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.1)' },
-  ytVideoWrapper: { width: '100%', height: width * (9 / 16), backgroundColor: '#000' },
+  ytVideoWrapper: { width: '100%', height: width * (9 / 16), backgroundColor: '#000', position: 'relative' },
   ytVideoView: { width: '100%', height: '100%' },
+  ytControlsOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'space-between', padding: 8 },
+  ytCenterControlsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 28, flex: 1 },
+  ytControlBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.15)', justifyContent: 'center', alignItems: 'center' },
+  ytControlBtnText: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
+  ytPlayPauseBtn: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#ef4444', justifyContent: 'center', alignItems: 'center', elevation: 4 },
+  ytPlayPauseText: { color: '#fff', fontSize: 22, fontWeight: 'bold' },
+  ytBottomBar: { width: '100%', paddingHorizontal: 4 },
+  ytTimelineRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  ytTimeText: { color: '#ddd', fontSize: 10, fontWeight: 'bold', minWidth: 35, textAlign: 'center' },
+  ytQuickActionsRow: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8, marginTop: 2 },
+  ytSpeedBtn: { backgroundColor: 'rgba(255,255,255,0.18)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
+  ytSpeedBtnText: { color: '#fff', fontSize: 11, fontWeight: 'bold' },
   ytPlayerMeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12, backgroundColor: '#12131c' },
   ytActiveTitle: { color: '#fff', fontSize: 13, fontWeight: 'bold' },
   ytActiveSub: { color: '#777', fontSize: 11, marginTop: 3 },
