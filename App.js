@@ -1,15 +1,53 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { 
   StyleSheet, Text, View, Dimensions, 
   TouchableOpacity, TextInput, ActivityIndicator, 
-  Alert, StatusBar, Pressable, LogBox, Image 
+  Alert, StatusBar, Pressable, LogBox, Image, ScrollView 
 } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import * as FileSystem from 'expo-file-system/legacy';
 import Slider from '@react-native-community/slider';
 import PagerView from 'react-native-pager-view';
 import { LinearGradient } from 'expo-linear-gradient';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// Güvenli Depolama (Expo Go & Native Uyumlu FileSystem Storage)
+const SafeStorage = {
+  _cache: {},
+  _loaded: false,
+  async _init() {
+    if (this._loaded) return;
+    try {
+      const fileUri = (FileSystem.documentDirectory || '') + 'app_settings.json';
+      const info = await FileSystem.getInfoAsync(fileUri);
+      if (info && info.exists) {
+        const text = await FileSystem.readAsStringAsync(fileUri);
+        this._cache = JSON.parse(text || '{}');
+      }
+    } catch(e) {}
+    this._loaded = true;
+  },
+  async getItem(key) {
+    await this._init();
+    return this._cache[key] !== undefined ? this._cache[key] : null;
+  },
+  async setItem(key, value) {
+    await this._init();
+    this._cache[key] = String(value);
+    try {
+      const fileUri = (FileSystem.documentDirectory || '') + 'app_settings.json';
+      await FileSystem.writeAsStringAsync(fileUri, JSON.stringify(this._cache));
+    } catch(e) {}
+  },
+  async removeItem(key) {
+    await this._init();
+    delete this._cache[key];
+    try {
+      const fileUri = (FileSystem.documentDirectory || '') + 'app_settings.json';
+      await FileSystem.writeAsStringAsync(fileUri, JSON.stringify(this._cache));
+    } catch(e) {}
+  }
+};
+const AsyncStorage = SafeStorage;
 
 LogBox.ignoreLogs(['Cannot connect to Expo CLI']);
 
@@ -22,13 +60,16 @@ function formatTime(seconds) {
   return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
 }
 
+// ============================================
+// REELS / TIKTOK SLIDE
+// ============================================
 function VideoSlide(props) {
   const isAdjacent = Math.abs(props.index - props.activeIndex) <= 1;
 
   if (!isAdjacent) {
     return (
-      <View style={[styles.videoContainer, { backgroundColor: '#111', justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator color="#E1306C" />
+      <View style={[styles.videoContainer, { backgroundColor: '#090a0f', justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator color="#00f2ea" />
       </View>
     );
   }
@@ -42,11 +83,11 @@ function ActiveVideoSlide({ item, index, activeIndex, serverIp, onDelete, uiVisi
   const [duration, setDuration] = useState(0);
   const [isSpeedUp, setIsSpeedUp] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
   const isLongPressPauseRef = useRef(false);
   
   const touchX = useRef(0);
   const longPressTimer = useRef(null);
-  const isLongPressRef = useRef(false);
   const videoViewRef = useRef(null);
   
   const cleanIp = serverIp.trim();
@@ -63,17 +104,12 @@ function ActiveVideoSlide({ item, index, activeIndex, serverIp, onDelete, uiVisi
     p.muted = false;
   });
 
-  // Sayfa değiştiğinde pause/speed state'lerini sıfırla
   useEffect(() => {
     if (!isActive) {
       setIsPaused(false);
       setIsSpeedUp(false);
       isLongPressPauseRef.current = false;
-      if (longPressTimer.current) {
-        clearTimeout(longPressTimer.current);
-        longPressTimer.current = null;
-      }
-      isLongPressRef.current = false;
+      if (longPressTimer.current) clearTimeout(longPressTimer.current);
     }
   }, [isActive]);
 
@@ -101,13 +137,14 @@ function ActiveVideoSlide({ item, index, activeIndex, serverIp, onDelete, uiVisi
   }, [isActive, player]);
 
   const toggleMute = () => {
-    if (player) player.muted = !player.muted;
+    if (player) {
+      player.muted = !player.muted;
+      setIsMuted(player.muted);
+    }
   };
 
   const toggleFullscreen = () => {
-    if (videoViewRef.current) {
-      videoViewRef.current.enterFullscreen();
-    }
+    if (videoViewRef.current) videoViewRef.current.enterFullscreen();
   };
 
   const handlePressIn = (e) => {
@@ -116,15 +153,12 @@ function ActiveVideoSlide({ item, index, activeIndex, serverIp, onDelete, uiVisi
 
   const handleLongPress = () => {
     if (!player) return;
-    
-    // Kenarlardan basılı tutma = 2x hız
     if (touchX.current > width * 0.75 || touchX.current < width * 0.25) {
       if (!isPaused) {
         player.playbackRate = 2.0;
         setIsSpeedUp(true);
       }
     } else {
-      // Ortadan basılı tutma = dondur + UI gizle
       setIsPaused(true);
       isLongPressPauseRef.current = true;
       setUiVisible(false);
@@ -136,7 +170,6 @@ function ActiveVideoSlide({ item, index, activeIndex, serverIp, onDelete, uiVisi
       player.playbackRate = 1.0;
       setIsSpeedUp(false);
     }
-    
     if (isLongPressPauseRef.current) {
       setIsPaused(false);
       isLongPressPauseRef.current = false;
@@ -178,7 +211,7 @@ function ActiveVideoSlide({ item, index, activeIndex, serverIp, onDelete, uiVisi
       >
         {showSlideUi && (
           <LinearGradient
-            colors={['rgba(0,0,0,0.5)', 'transparent', 'transparent', 'rgba(0,0,0,0.9)']}
+            colors={['rgba(0,0,0,0.6)', 'transparent', 'transparent', 'rgba(0,0,0,0.9)']}
             style={styles.gradientOverlay}
             pointerEvents="none"
           />
@@ -186,54 +219,58 @@ function ActiveVideoSlide({ item, index, activeIndex, serverIp, onDelete, uiVisi
 
         {isPaused && !isLongPressPauseRef.current && (
           <View style={styles.pauseIconContainer} pointerEvents="none">
-            <Text style={styles.pauseIcon}>⏸</Text>
+            <Text style={styles.pauseIconText}>DURAKLATILDI</Text>
           </View>
         )}
 
         {isSpeedUp && (
           <View style={styles.speedUpOverlay} pointerEvents="none">
-            <Text style={styles.speedUpText}>⏩ 2x</Text>
+            <Text style={styles.speedUpText}>2x Hız</Text>
           </View>
         )}
       </Pressable>
 
       {showSlideUi && (
         <>
-          {/* Sağ Menü */}
+          {/* Kompakt Yan Menü */}
           <View style={styles.sideActions} pointerEvents="box-none">
             <TouchableOpacity style={styles.sideBtn} onPress={toggleMute}>
-              <View style={styles.iconCircle}>
-                <Text style={styles.iconText}>🔊</Text>
+              <View style={[styles.iconCircle, isMuted && { backgroundColor: 'rgba(239, 68, 68, 0.5)', borderColor: 'rgba(239, 68, 68, 0.4)' }]}>
+                <Text style={styles.actionBtnLabel}>{isMuted ? 'X' : 'SES'}</Text>
               </View>
-              <Text style={styles.sideLabel}>Ses</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.sideBtn} onPress={toggleFullscreen}>
-              <View style={[styles.iconCircle, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
-                <Text style={styles.iconText}>⛶</Text>
+              <View style={styles.iconCircle}>
+                <Text style={styles.actionBtnLabel}>TAM</Text>
               </View>
-              <Text style={styles.sideLabel}>Tam Ekran</Text>
             </TouchableOpacity>
             
             {item.isLocal && (
               <TouchableOpacity style={styles.sideBtn} onPress={() => onDelete(item)}>
-                <View style={[styles.iconCircle, { backgroundColor: 'rgba(239, 68, 68, 0.7)' }]}>
-                  <Text style={styles.iconText}>🗑️</Text>
+                <View style={[styles.iconCircle, { backgroundColor: 'rgba(239, 68, 68, 0.6)' }]}>
+                  <Text style={styles.actionBtnLabel}>SİL</Text>
                 </View>
-                <Text style={styles.sideLabel}>Sil</Text>
               </TouchableOpacity>
             )}
           </View>
 
-          {/* Alt Bilgiler */}
+          {/* Alt Bilgi */}
           <View style={styles.videoInfo} pointerEvents="none">
-            <View style={[styles.badge, item.isLocal ? styles.badgeLocal : styles.badgeServer]}>
-              <Text style={styles.badgeText}>{item.isLocal ? '📱 Offline' : '☁️ Sunucu'}</Text>
+            <View style={{ flexDirection: 'row', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
+              <View style={[styles.badge, item.isLocal ? styles.badgeLocal : styles.badgeServer]}>
+                <Text style={styles.badgeText}>{item.isLocal ? 'Offline' : 'Sunucu'}</Text>
+              </View>
+              {item.uploader && item.uploader !== 'Genel' && (
+                <View style={[styles.badge, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+                  <Text style={styles.badgeText}>@{item.uploader}</Text>
+                </View>
+              )}
             </View>
-            <Text style={styles.videoName} numberOfLines={2}>{item.name}</Text>
+            <Text style={styles.videoName} numberOfLines={2}>{item.name.replace('.mp4', '')}</Text>
           </View>
 
-          {/* İlerleme Çubuğu */}
+          {/* Zarif Alt Scrubber */}
           <View style={styles.scrubberContainer}>
             <Text style={styles.timeText}>{formatTime(progress)}</Text>
             <Slider
@@ -243,8 +280,8 @@ function ActiveVideoSlide({ item, index, activeIndex, serverIp, onDelete, uiVisi
               value={progress}
               onValueChange={handleSeek}
               onSlidingComplete={handleSeek}
-              minimumTrackTintColor="#fff"
-              maximumTrackTintColor="rgba(255,255,255,0.3)"
+              minimumTrackTintColor="#00f2ea"
+              maximumTrackTintColor="rgba(255,255,255,0.2)"
               thumbTintColor="#fff"
             />
             <Text style={styles.timeText}>{formatTime(duration)}</Text>
@@ -255,33 +292,194 @@ function ActiveVideoSlide({ item, index, activeIndex, serverIp, onDelete, uiVisi
   );
 }
 
+// ============================================
+// YOUTUBE HUB (AYRI GENİŞ EKRAN GALERİ)
+// ============================================
+function YouTubeHub({ list, serverIp, onBack, onDelete }) {
+  const [selectedVideo, setSelectedVideo] = useState(list.length > 0 ? list[0] : null);
+  const videoViewRef = useRef(null);
+
+  useEffect(() => {
+    if (list.length > 0 && !selectedVideo) {
+      setSelectedVideo(list[0]);
+    }
+  }, [list]);
+
+  const cleanIp = serverIp.trim();
+  let serverVideoUri = '';
+  if (selectedVideo) {
+    if (cleanIp.startsWith('http')) {
+      serverVideoUri = `${cleanIp}${selectedVideo.path}`;
+    } else {
+      serverVideoUri = `http://${cleanIp}:3000${selectedVideo.path}`;
+    }
+  }
+  const videoUri = selectedVideo ? (selectedVideo.isLocal ? selectedVideo.uri : serverVideoUri) : '';
+
+  const player = useVideoPlayer(videoUri, p => {
+    p.loop = true;
+    p.muted = false;
+  });
+
+  useEffect(() => {
+    if (player && selectedVideo) {
+      player.play();
+    }
+  }, [selectedVideo, player]);
+
+  const toggleFullscreen = () => {
+    if (videoViewRef.current) videoViewRef.current.enterFullscreen();
+  };
+
+  return (
+    <View style={styles.ytHubContainer}>
+      {/* Üst Bar: Geri Dön Butonu ve Başlık */}
+      <View style={styles.ytHeaderBar}>
+        <TouchableOpacity onPress={onBack} style={styles.ytBackBtn}>
+          <Text style={styles.ytBackBtnText}>Geri</Text>
+        </TouchableOpacity>
+        <Text style={styles.ytHeaderTitle}>YouTube Stüdyo</Text>
+        <View style={styles.ytCountBadge}>
+          <Text style={styles.ytCountText}>{list.length}</Text>
+        </View>
+      </View>
+
+      {/* 16:9 YouTube Video Oynatıcı */}
+      {selectedVideo ? (
+        <View style={styles.ytPlayerSection}>
+          <View style={styles.ytVideoWrapper}>
+            <VideoView
+              ref={videoViewRef}
+              player={player}
+              style={styles.ytVideoView}
+              contentFit="contain"
+              nativeControls={true}
+            />
+          </View>
+          <View style={styles.ytPlayerMeta}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.ytActiveTitle} numberOfLines={2}>
+                {selectedVideo.name.replace('.mp4', '')}
+              </Text>
+              <Text style={styles.ytActiveSub}>
+                {selectedVideo.isLocal ? 'Offline' : 'Sunucu'}
+                {selectedVideo.size ? ` • ${(selectedVideo.size / (1024*1024)).toFixed(1)} MB` : ''}
+              </Text>
+            </View>
+            <TouchableOpacity style={styles.ytFullscreenBtn} onPress={toggleFullscreen}>
+              <Text style={{ fontSize: 13, color: '#fff', fontWeight: 'bold' }}>TAM</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : (
+        <View style={styles.ytNoSelection}>
+          <Text style={{ color: '#888', fontSize: 14 }}>Aşağıdan izlemek için bir video seçin</Text>
+        </View>
+      )}
+
+      {/* Video Kartları Galerisi */}
+      <ScrollView style={styles.ytScrollView} contentContainerStyle={styles.ytScrollContent}>
+        {list.length === 0 ? (
+          <View style={{ padding: 40, alignItems: 'center' }}>
+            <Text style={{ color: '#666', fontSize: 14 }}>İndirilmiş YouTube videosu bulunamadı.</Text>
+          </View>
+        ) : (
+          list.map((item, idx) => {
+            const isPlaying = selectedVideo && selectedVideo.name === item.name;
+            const sizeMb = item.size ? `${(item.size / (1024 * 1024)).toFixed(1)} MB` : '';
+            return (
+              <TouchableOpacity
+                key={item.name + idx}
+                style={[styles.ytCard, isPlaying && styles.ytCardActive]}
+                onPress={() => setSelectedVideo(item)}
+                activeOpacity={0.8}
+              >
+                {/* 16:9 Thumbnail Önizleme Kutusu */}
+                <View style={styles.ytThumbnailBox}>
+                  <LinearGradient
+                    colors={['#2a1215', '#151520']}
+                    style={StyleSheet.absoluteFill}
+                  />
+                  <View style={styles.ytPlayIconBadge}>
+                    <Text style={{ color: '#fff', fontSize: 13 }}>{'>'}</Text>
+                  </View>
+                  <View style={styles.ytBadgeDuration}>
+                    <Text style={{ color: '#fff', fontSize: 9, fontWeight: 'bold' }}>HD</Text>
+                  </View>
+                </View>
+
+                {/* Video Başlığı & Detaylar */}
+                <View style={styles.ytCardDetails}>
+                  <Text style={[styles.ytCardTitle, isPlaying && { color: '#ef4444' }]} numberOfLines={2}>
+                    {item.name.replace('.mp4', '')}
+                  </Text>
+                  <View style={styles.ytCardMetaRow}>
+                    <Text style={styles.ytCardSize}>{sizeMb || 'Video'}</Text>
+                    {isPlaying && (
+                      <View style={styles.ytNowPlayingBadge}>
+                        <Text style={styles.ytNowPlayingText}>Oynatılıyor</Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+              </TouchableOpacity>
+            );
+          })
+        )}
+      </ScrollView>
+    </View>
+  );
+}
+
+// ============================================
+// MAIN APP COMPONENT
+// ============================================
 export default function App() {
-  const [serverIp, setServerIp] = useState('192.168.1.2');
+  const [serverIp, setServerIp] = useState('192.168.1.4');
   const [isConnected, setIsConnected] = useState(false);
   const [serverVideos, setServerVideos] = useState([]);
   const [localVideos, setLocalVideos] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [dlProgress, setDlProgress] = useState('');
-  const [platform, setPlatform] = useState('instagram');
+  
+  // Mod: 'menu' (Ana Menü), 'instagram' (Reels), 'tiktok' (TikTok), 'youtube' (YouTube Stüdyo)
+  const [currentMode, setCurrentMode] = useState('menu');
+  
   const [activeIndex, setActiveIndex] = useState(0);
-  const [showSetup, setShowSetup] = useState(true);
   const [uiVisible, setUiVisible] = useState(true);
   const [isSwiping, setIsSwiping] = useState(false);
   const [showJumpPrompt, setShowJumpPrompt] = useState(false);
   const [jumpIndex, setJumpIndex] = useState('');
   const [savedFolderUri, setSavedFolderUri] = useState(null);
+  const [lastWatched, setLastWatched] = useState({ instagram: 0, tiktok: 0, youtube: 0 });
+  const [selectedProfile, setSelectedProfile] = useState('all');
   
   const pagerRef = useRef(null);
 
   useEffect(() => {
     loadLocalVideos();
-  }, [platform]);
+  }, []);
 
-  // Kaydedilmiş klasörü yükle
+  // Kaydedilmiş klasör ve son pozisyonları yükle
   useEffect(() => {
     AsyncStorage.getItem('downloadFolderUri').then(uri => {
       if (uri) setSavedFolderUri(uri);
+    });
+    AsyncStorage.getItem('serverIp').then(ip => {
+      if (ip) setServerIp(ip);
+    });
+    Promise.all([
+      AsyncStorage.getItem('lastWatched_instagram'),
+      AsyncStorage.getItem('lastWatched_tiktok'),
+      AsyncStorage.getItem('lastWatched_youtube')
+    ]).then(([ig, tt, yt]) => {
+      setLastWatched({
+        instagram: ig ? parseInt(ig, 10) : 0,
+        tiktok: tt ? parseInt(tt, 10) : 0,
+        youtube: yt ? parseInt(yt, 10) : 0
+      });
     });
   }, []);
 
@@ -289,22 +487,31 @@ export default function App() {
     try {
       const igDir = FileSystem.documentDirectory + 'reels/instagram/';
       const ttDir = FileSystem.documentDirectory + 'reels/tiktok/';
+      const ytDir = FileSystem.documentDirectory + 'reels/youtube/';
       
-      for (const dir of [igDir, ttDir]) {
+      for (const dir of [igDir, ttDir, ytDir]) {
         const info = await FileSystem.getInfoAsync(dir);
         if (!info.exists) await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
       }
 
-      const dir = platform === 'instagram' ? igDir : ttDir;
-      const files = await FileSystem.readDirectoryAsync(dir);
-      const vids = files
-        .filter(f => f.endsWith('.mp4'))
-        .map(f => ({ uri: dir + f, name: f, isLocal: true }));
-      
-      setLocalVideos(vids);
-      if (vids.length > 0) setShowSetup(false);
+      let allLocal = [];
+      const readDir = async (dir, plat) => {
+        try {
+          const files = await FileSystem.readDirectoryAsync(dir);
+          return files.filter(f => f.endsWith('.mp4')).map(f => {
+            const parts = f.replace('.mp4', '').split('_');
+            const uploader = (parts.length >= 3 && parts[1] !== 'genel') ? parts[1] : 'Genel';
+            return { uri: dir + f, name: f, isLocal: true, uploader, platform: plat };
+          });
+        } catch(e) { return []; }
+      };
+
+      const igVids = await readDir(igDir, 'instagram');
+      const ttVids = await readDir(ttDir, 'tiktok');
+      const ytVids = await readDir(ytDir, 'youtube');
+      setLocalVideos([...igVids, ...ttVids, ...ytVids]);
     } catch (err) {
-      console.log('Yerel video hatası:', err);
+      console.log('Yerel video yükleme hatası:', err);
     }
   };
 
@@ -312,19 +519,15 @@ export default function App() {
     setLoading(true);
     try {
       const cleanIp = serverIp.trim();
-      let fetchUrl = '';
-      if (cleanIp.startsWith('http')) {
-        fetchUrl = `${cleanIp}/api/files`;
-      } else {
-        fetchUrl = `http://${cleanIp}:3000/api/files`;
-      }
+      let fetchUrl = cleanIp.startsWith('http') ? `${cleanIp}/api/files` : `http://${cleanIp}:3000/api/files`;
+      
       const res = await fetch(fetchUrl);
       const data = await res.json();
       if (data.files) {
         setServerVideos(data.files);
         setIsConnected(true);
-        setShowSetup(false);
-        Alert.alert('Bağlandı!', `${data.files.length} video bulundu.`);
+        await AsyncStorage.setItem('serverIp', cleanIp);
+        Alert.alert('Bağlandı!', `${data.files.length} video hazır.`);
       }
     } catch (err) {
       Alert.alert('Bağlantı Hatası', `Sunucuya ulaşılamadı. IP: ${serverIp.trim()}\nHata: ${err.message}`);
@@ -332,114 +535,112 @@ export default function App() {
     setLoading(false);
   };
 
+  const scanForServer = async () => {
+    setIsScanning(true);
+    const subnets = ['192.168.1', '192.168.0', '192.168.2', '10.0.0'];
+    const timeout = 1500;
+    let found = false;
+
+    for (const subnet of subnets) {
+      if (found) break;
+      const batch = [];
+      for (let i = 1; i <= 254; i++) {
+        const ip = `${subnet}.${i}`;
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeout);
+        batch.push(
+          fetch(`http://${ip}:3000/api/files`, { signal: controller.signal })
+            .then(async (res) => {
+              clearTimeout(timer);
+              const data = await res.json();
+              if (data.files && !found) {
+                found = true;
+                setServerIp(ip);
+                setServerVideos(data.files);
+                setIsConnected(true);
+                await AsyncStorage.setItem('serverIp', ip);
+                Alert.alert('Sunucu Bulundu!', `${ip} adresinde ${data.files.length} video.`);
+              }
+            })
+            .catch(() => { clearTimeout(timer); })
+        );
+      }
+      await Promise.all(batch);
+    }
+
+    if (!found) {
+      Alert.alert('Bulunamadı', 'Ağda sunucu tespit edilemedi. IP adresini elle girin.');
+    }
+    setIsScanning(false);
+  };
+
   const downloadAll = async () => {
-    const platformVideos = serverVideos.filter(v => 
-      platform === 'instagram' 
-        ? (v.name.includes('reels') || v.name.includes('instagram'))
-        : (v.name.includes('tiktok'))
-    );
+    if (serverVideos.length === 0) {
+      Alert.alert('Bilgi', 'Sunucuda indirilecek video bulunamadı.');
+      return;
+    }
 
-    if (platformVideos.length === 0) return;
-
-    const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
-    if (!permissions.granted) return;
-
-    // Klasörü kaydet
-    setSavedFolderUri(permissions.directoryUri);
-    await AsyncStorage.setItem('downloadFolderUri', permissions.directoryUri);
+    let folderUri = savedFolderUri || await AsyncStorage.getItem('downloadFolderUri');
+    if (!folderUri) {
+      const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+      if (!permissions.granted) return;
+      folderUri = permissions.directoryUri;
+      setSavedFolderUri(folderUri);
+      await AsyncStorage.setItem('downloadFolderUri', folderUri);
+    }
 
     setDownloading(true);
-    const dir = FileSystem.documentDirectory + `reels/${platform}/`;
     let count = 0;
 
-    for (let i = 0; i < platformVideos.length; i++) {
-      const file = platformVideos[i];
+    for (let i = 0; i < serverVideos.length; i++) {
+      const file = serverVideos[i];
+      const isTikTok = file.platform === 'tiktok' || file.name.includes('tiktok');
+      const isYoutube = file.platform === 'youtube' || file.name.includes('youtube');
+      const targetPlatform = isTikTok ? 'tiktok' : (isYoutube ? 'youtube' : 'instagram');
+      const dir = FileSystem.documentDirectory + `reels/${targetPlatform}/`;
       const fileUri = dir + file.name;
-      setDlProgress(`${i + 1}/${platformVideos.length} indiriliyor...`);
+      
+      setDlProgress(`${i + 1}/${serverVideos.length} indiriliyor...`);
 
       const exists = await FileSystem.getInfoAsync(fileUri);
       if (!exists.exists) {
         try {
           const cleanIp = serverIp.trim();
-          let downloadUrl = '';
-          if (cleanIp.startsWith('http')) {
-            downloadUrl = `${cleanIp}${file.path}`;
-          } else {
-            downloadUrl = `http://${cleanIp}:3000${file.path}`;
-          }
+          let downloadUrl = cleanIp.startsWith('http') ? `${cleanIp}${file.path}` : `http://${cleanIp}:3000${file.path}`;
           const downloadRes = await FileSystem.downloadAsync(downloadUrl, fileUri);
           const base64Data = await FileSystem.readAsStringAsync(downloadRes.uri, { encoding: FileSystem.EncodingType.Base64 });
-          const newFileUri = await FileSystem.StorageAccessFramework.createFileAsync(permissions.directoryUri, file.name, 'video/mp4');
+          const newFileUri = await FileSystem.StorageAccessFramework.createFileAsync(folderUri, file.name, 'video/mp4');
           await FileSystem.writeAsStringAsync(newFileUri, base64Data, { encoding: FileSystem.EncodingType.Base64 });
           count++;
-        } catch (e) {
-          console.log('İndirme hatası:', e);
-        }
+        } catch (e) {}
       }
     }
 
     setDownloading(false);
     setDlProgress('');
-    Alert.alert('Tamamlandı!', `${count} video indirildi!`);
+    Alert.alert('Tamamlandı!', `${count} video cihaza kaydedildi!`);
     loadLocalVideos();
   };
 
   const deleteAllOffline = async () => {
     Alert.alert(
-      'Tümünü Sil',
-      'İndirilen TÜM videolar (uygulama içi + seçilen klasör) silinecek. Emin misin?',
+      'Tüm Offline Videoları Sil',
+      'İndirilen tüm videolar cihazdan silinecek. Emin misin?',
       [
         { text: 'İptal', style: 'cancel' },
         { text: 'Evet, Sil', style: 'destructive', onPress: async () => {
             try {
-              let deletedCount = 0;
-
-              // 1) Uygulama iç dizinindeki videoları sil
               const igDir = FileSystem.documentDirectory + 'reels/instagram/';
               const ttDir = FileSystem.documentDirectory + 'reels/tiktok/';
-              
-              const igInfo = await FileSystem.getInfoAsync(igDir);
-              if (igInfo.exists) {
-                const igFiles = await FileSystem.readDirectoryAsync(igDir);
-                for (const f of igFiles) {
-                  await FileSystem.deleteAsync(igDir + f, { idempotent: true });
-                  deletedCount++;
-                }
+              const ytDir = FileSystem.documentDirectory + 'reels/youtube/';
+              for (const dir of [igDir, ttDir, ytDir]) {
+                const info = await FileSystem.getInfoAsync(dir);
+                if (info.exists) await FileSystem.deleteAsync(dir, { idempotent: true });
               }
-              
-              const ttInfo = await FileSystem.getInfoAsync(ttDir);
-              if (ttInfo.exists) {
-                const ttFiles = await FileSystem.readDirectoryAsync(ttDir);
-                for (const f of ttFiles) {
-                  await FileSystem.deleteAsync(ttDir + f, { idempotent: true });
-                  deletedCount++;
-                }
-              }
-
-              // 2) SAF ile seçilen klasördeki dosyaları da sil
-              const folderUri = savedFolderUri || await AsyncStorage.getItem('downloadFolderUri');
-              if (folderUri) {
-                try {
-                  const safFiles = await FileSystem.StorageAccessFramework.readDirectoryAsync(folderUri);
-                  for (const fileUri of safFiles) {
-                    try {
-                      await FileSystem.StorageAccessFramework.deleteAsync(fileUri, { idempotent: true });
-                      deletedCount++;
-                    } catch (e) {
-                      console.log('SAF dosya silme hatası:', e);
-                    }
-                  }
-                } catch (e) {
-                  console.log('SAF klasör okuma hatası:', e);
-                }
-              }
-              
               setLocalVideos([]);
-              Alert.alert('Başarılı', `${deletedCount} dosya silindi! (Uygulama + Klasör)`);
-            } catch (err) {
-              console.log('Silme hatası:', err);
-              Alert.alert('Hata', 'Silme sırasında bir hata oluştu.');
-            }
+              setLastWatched({ instagram: 0, tiktok: 0, youtube: 0 });
+              Alert.alert('Başarılı', 'Tüm offline videolar temizlendi.');
+            } catch (err) {}
           }
         }
       ]
@@ -447,142 +648,279 @@ export default function App() {
   };
 
   const deleteVideo = async (item) => {
-    Alert.alert(
-      'Emin misin?',
-      'Bu video uygulamadan kalıcı olarak silinecek.',
-      [
-        { text: 'İptal', style: 'cancel' },
-        { text: 'Sil', style: 'destructive', onPress: async () => {
-            try {
-              await FileSystem.deleteAsync(item.uri, { idempotent: true });
-              setLocalVideos(prev => prev.filter(v => v.uri !== item.uri));
-              setActiveIndex(prev => Math.max(0, prev - 1));
-            } catch (err) {
-              console.log('Silme hatası:', err);
-              Alert.alert('Hata', 'Video silinemedi.');
-            }
-          }
+    Alert.alert('Video Silinsin mi?', item.name, [
+      { text: 'İptal', style: 'cancel' },
+      { text: 'Sil', style: 'destructive', onPress: async () => {
+          try {
+            await FileSystem.deleteAsync(item.uri, { idempotent: true });
+            setLocalVideos(prev => prev.filter(v => v.uri !== item.uri));
+            setActiveIndex(prev => Math.max(0, prev - 1));
+          } catch(e) {}
         }
-      ]
-    );
+      }
+    ]);
   };
 
-  const currentList = localVideos.length > 0 ? localVideos : 
-    serverVideos.filter(v => 
-      platform === 'instagram' 
-        ? (v.name.includes('reels') || v.name.includes('instagram'))
-        : (v.name.includes('tiktok'))
-    );
+  // Platform bazlı listeler
+  const getListForPlatform = (plat) => {
+    const local = localVideos.filter(v => v.platform === plat);
+    if (local.length > 0) return local;
+    return serverVideos.filter(v => {
+      if (plat === 'instagram') return v.platform === 'instagram' || v.name.includes('instagram') || v.name.includes('reels');
+      if (plat === 'tiktok') return v.platform === 'tiktok' || v.name.includes('tiktok');
+      if (plat === 'youtube') return v.platform === 'youtube' || v.name.includes('youtube');
+      return false;
+    });
+  };
 
-  if (showSetup) {
+  const igList = useMemo(() => getListForPlatform('instagram'), [localVideos, serverVideos]);
+  const ttList = useMemo(() => getListForPlatform('tiktok'), [localVideos, serverVideos]);
+  const ytList = useMemo(() => getListForPlatform('youtube'), [localVideos, serverVideos]);
+
+  const currentList = useMemo(() => {
+    if (currentMode === 'instagram') return igList;
+    if (currentMode === 'tiktok') return ttList;
+    if (currentMode === 'youtube') return ytList;
+    return [];
+  }, [currentMode, igList, ttList, ytList]);
+
+  // ============================================
+  // EKRAN 1: ANA GİRİŞ / MOD SEÇİM DASHBOARD'U
+  // ============================================
+  if (currentMode === 'menu') {
     return (
       <View style={styles.container}>
         <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
-        <LinearGradient colors={['#1a1a2e', '#050508']} style={styles.setupContainer}>
-          <Image source={require('./assets/logo.jpg')} style={styles.setupLogo} />
-          <Text style={styles.setupTitle}>Reels Player</Text>
+        <LinearGradient colors={['#0f1019', '#07070a']} style={styles.menuContainer}>
           
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Bilgisayar IP Adresi</Text>
-            <TextInput
-              style={styles.input}
-              value={serverIp}
-              onChangeText={setServerIp}
-              keyboardType="decimal-pad"
-              placeholder="192.168.1.X"
-              placeholderTextColor="#555"
-            />
+          {/* Header */}
+          <View style={styles.menuHeader}>
+            <Image source={require('./assets/logo.jpg')} style={styles.menuLogo} />
+            <View>
+              <Text style={styles.menuTitle}>Reels Studio</Text>
+              <Text style={styles.menuSubtitle}>Video & Akış Merkezi</Text>
+            </View>
           </View>
 
-          <TouchableOpacity style={styles.connectBtn} onPress={connectToServer} disabled={loading}>
-            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.connectBtnText}>🔗 Bağlan</Text>}
-          </TouchableOpacity>
-
-          {localVideos.length > 0 && (
-            <TouchableOpacity style={styles.offlineBtn} onPress={() => setShowSetup(false)}>
-              <Text style={styles.offlineBtnText}>🚀 Offline Videoları İzle</Text>
-            </TouchableOpacity>
-          )}
-          
-          <TouchableOpacity style={styles.deleteBtn} onPress={deleteAllOffline}>
-            <Text style={styles.deleteBtnText}>🗑️ Tüm Offline Videoları Temizle</Text>
-          </TouchableOpacity>
-
-          {/* Klasör Ayarları */}
-          <View style={styles.folderSection}>
-            <Text style={styles.folderTitle}>📂 İndirme Klasörü</Text>
-            <Text style={styles.folderPath} numberOfLines={2}>
-              {savedFolderUri ? decodeURIComponent(savedFolderUri.replace('content://com.android.externalstorage.documents/tree/', '').replace(/%2F/g, '/').replace(/%3A/g, ':')) : 'Henüz seçilmedi'}
-            </Text>
+          {/* IP Bağlantı Çubuğu */}
+          <View style={styles.ipBar}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.ipLabel}>Sunucu IP</Text>
+              <TextInput
+                style={styles.ipInput}
+                value={serverIp}
+                onChangeText={setServerIp}
+                keyboardType="decimal-pad"
+                placeholder="192.168.1.X"
+                placeholderTextColor="#666"
+              />
+            </View>
             <TouchableOpacity 
-              style={styles.folderBtn} 
-              onPress={async () => {
-                const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
-                if (permissions.granted) {
-                  setSavedFolderUri(permissions.directoryUri);
-                  await AsyncStorage.setItem('downloadFolderUri', permissions.directoryUri);
-                  Alert.alert('Başarılı', 'Yeni indirme klasörü kaydedildi!');
-                }
-              }}
+              style={styles.ipScanBtn} 
+              onPress={scanForServer}
+              disabled={isScanning}
             >
-              <Text style={styles.folderBtnText}>📁 Klasör Seç / Değiştir</Text>
+              {isScanning ? (
+                <ActivityIndicator color="#00f2ea" size="small" />
+              ) : (
+                <Text style={styles.ipScanText}>Tara</Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.ipConnectBtn, isConnected && { backgroundColor: '#10b981' }]} 
+              onPress={connectToServer}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Text style={styles.ipConnectText}>{isConnected ? 'Bağlı' : 'Bağlan'}</Text>
+              )}
             </TouchableOpacity>
           </View>
+
+          <Text style={styles.sectionHeaderTitle}>İzlemek İstediğin Modu Seç</Text>
+
+          {/* 3 BÜYÜK MOD KARTI */}
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ gap: 14, paddingBottom: 30 }}>
+            
+            {/* KART 1: INSTAGRAM REELS */}
+            <TouchableOpacity 
+              style={[styles.modeCard, { borderColor: 'rgba(225, 48, 108, 0.4)' }]} 
+              onPress={() => {
+                setCurrentMode('instagram');
+                const last = lastWatched.instagram || 0;
+                setActiveIndex(last < igList.length ? last : 0);
+              }}
+              activeOpacity={0.85}
+            >
+              <LinearGradient colors={['rgba(225, 48, 108, 0.2)', 'rgba(0,0,0,0.5)']} style={StyleSheet.absoluteFill} />
+              <View style={styles.modeCardContent}>
+                <View style={[styles.modeIconCircle, { backgroundColor: '#E1306C' }]}>
+                  <Text style={{ fontSize: 13, color: '#fff', fontWeight: 'bold' }}>IG</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.modeCardTitle}>Instagram Reels</Text>
+                  <Text style={styles.modeCardDesc}>Dikey tam ekran akış</Text>
+                  <Text style={styles.modeCardBadge}>{igList.length} Video</Text>
+                </View>
+                <Text style={styles.modeArrow}>{'>'}</Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* KART 2: TIKTOK */}
+            <TouchableOpacity 
+              style={[styles.modeCard, { borderColor: 'rgba(0, 242, 234, 0.4)' }]} 
+              onPress={() => {
+                setCurrentMode('tiktok');
+                const last = lastWatched.tiktok || 0;
+                setActiveIndex(last < ttList.length ? last : 0);
+              }}
+              activeOpacity={0.85}
+            >
+              <LinearGradient colors={['rgba(0, 242, 234, 0.15)', 'rgba(0,0,0,0.5)']} style={StyleSheet.absoluteFill} />
+              <View style={styles.modeCardContent}>
+                <View style={[styles.modeIconCircle, { backgroundColor: '#00f2ea' }]}>
+                  <Text style={{ fontSize: 13, color: '#000', fontWeight: 'bold' }}>TT</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.modeCardTitle}>TikTok Keşfet</Text>
+                  <Text style={styles.modeCardDesc}>Otomatik toplanan videolar</Text>
+                  <Text style={[styles.modeCardBadge, { color: '#00f2ea', backgroundColor: 'rgba(0,242,234,0.15)' }]}>
+                    {ttList.length} Video
+                  </Text>
+                </View>
+                <Text style={styles.modeArrow}>{'>'}</Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* KART 3: YOUTUBE STÜDYO (AYRI GENİŞ EKRAN) */}
+            <TouchableOpacity 
+              style={[styles.modeCard, { borderColor: 'rgba(239, 68, 68, 0.5)' }]} 
+              onPress={() => setCurrentMode('youtube')}
+              activeOpacity={0.85}
+            >
+              <LinearGradient colors={['rgba(239, 68, 68, 0.2)', 'rgba(0,0,0,0.5)']} style={StyleSheet.absoluteFill} />
+              <View style={styles.modeCardContent}>
+                <View style={[styles.modeIconCircle, { backgroundColor: '#ef4444' }]}>
+                  <Text style={{ fontSize: 13, color: '#fff', fontWeight: 'bold' }}>YT</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.modeCardTitle}>YouTube Stüdyo</Text>
+                  <Text style={styles.modeCardDesc}>Geniş ekran (16:9) galeri</Text>
+                  <Text style={[styles.modeCardBadge, { color: '#ef4444', backgroundColor: 'rgba(239,68,68,0.15)' }]}>
+                    {ytList.length} Video
+                  </Text>
+                </View>
+                <Text style={styles.modeArrow}>{'>'}</Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* İndirme & Ayar Butonları */}
+            {isConnected && (
+              <TouchableOpacity style={styles.quickDownloadBtn} onPress={downloadAll} disabled={downloading}>
+                {downloading ? (
+                  <ActivityIndicator color="#000" size="small" />
+                ) : (
+                  <Text style={styles.quickDownloadText}>Tüm Videoları İndir ({serverVideos.length})</Text>
+                )}
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity style={styles.deleteOfflineBtn} onPress={deleteAllOffline}>
+              <Text style={{ color: '#ef4444', fontWeight: 'bold', fontSize: 13 }}>İndirilenleri Temizle</Text>
+            </TouchableOpacity>
+          </ScrollView>
+
         </LinearGradient>
       </View>
     );
   }
 
+  // ============================================
+  // EKRAN 2: YOUTUBE STÜDYO MODU
+  // ============================================
+  if (currentMode === 'youtube') {
+    return (
+      <View style={styles.container}>
+        <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+        <YouTubeHub 
+          list={ytList} 
+          serverIp={serverIp} 
+          onBack={() => setCurrentMode('menu')} 
+          onDelete={deleteVideo} 
+        />
+      </View>
+    );
+  }
+
+  // ============================================
+  // EKRAN 3: DİKEY REELS & TIKTOK MODU (FERAH & TEMİZ HUD)
+  // ============================================
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
-      {/* Header UI - Sadece dokununca görünür/kaybolur */}
+      {/* TEMİZ & FERAH ÜST HUD */}
       {uiVisible && (
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => setShowSetup(true)} style={styles.backBtn}>
-            <Text style={styles.backBtnText}>⚙️</Text>
+        <View style={styles.minimalHeader}>
+          {/* Sol: Geri / Menü Butonu */}
+          <TouchableOpacity onPress={() => setCurrentMode('menu')} style={styles.hudBackBtn}>
+            <Text style={styles.hudBackText}>Menü</Text>
           </TouchableOpacity>
-          <View style={styles.tabRow}>
-            <TouchableOpacity 
-              style={[styles.tab, platform === 'instagram' && styles.tabActiveIg]}
-              onPress={() => { setPlatform('instagram'); setActiveIndex(0); }}
-            >
-              <Text style={styles.tabText}>📸 Insta</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.tab, platform === 'tiktok' && styles.tabActiveTt]}
-              onPress={() => { setPlatform('tiktok'); setActiveIndex(0); }}
-            >
-              <Text style={styles.tabText}>🎵 TikTok</Text>
-            </TouchableOpacity>
-          </View>
-          <TouchableOpacity style={styles.counterContainer} onPress={() => setShowJumpPrompt(true)}>
-            <Text style={styles.counter}>{activeIndex + 1} / {currentList.length}</Text>
+
+          {/* Orta: Platform Rozeti (tıkla değiştir) */}
+          <TouchableOpacity 
+            style={styles.hudPlatformBadge} 
+            onPress={() => {
+              const nextMode = currentMode === 'instagram' ? 'tiktok' : 'instagram';
+              const nextList = nextMode === 'instagram' ? igList : ttList;
+              if (nextList.length === 0) {
+                Alert.alert('Bilgi', `${nextMode === 'instagram' ? 'Instagram' : 'TikTok'} videosu bulunamadı.`);
+                return;
+              }
+              const last = lastWatched[nextMode] || 0;
+              setActiveIndex(last < nextList.length ? last : 0);
+              setCurrentMode(nextMode);
+            }}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.hudPlatformText}>
+              {currentMode === 'instagram' ? 'INSTAGRAM' : 'TIKTOK'}
+            </Text>
+          </TouchableOpacity>
+
+          {/* Sağ: Sayaç Rozeti */}
+          <TouchableOpacity style={styles.hudCounterBtn} onPress={() => setShowJumpPrompt(true)}>
+            <Text style={styles.hudCounterText}>{activeIndex + 1} / {currentList.length}</Text>
           </TouchableOpacity>
         </View>
       )}
 
+      {/* Dikey Kaydırıcı */}
       {currentList.length === 0 ? (
         <View style={styles.emptyState}>
-          <Text style={styles.emptyTitle}>Henüz video yok</Text>
+          <Text style={styles.emptyTitle}>Bu bölümde video bulunamadı</Text>
+          <TouchableOpacity onPress={() => setCurrentMode('menu')} style={[styles.connectBtn, { marginTop: 20 }]}>
+            <Text style={styles.connectBtnText}>{'<'} Menüye Dön</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         <PagerView 
+          key={currentMode}
           ref={pagerRef}
           style={{ flex: 1 }} 
-          initialPage={0} 
+          initialPage={lastWatched[currentMode] || 0} 
           orientation="vertical"
           onPageScrollStateChanged={(e) => {
-            if (e.nativeEvent.pageScrollState !== 'idle') {
-              setIsSwiping(true);
-            } else {
-              setIsSwiping(false);
-            }
+            setIsSwiping(e.nativeEvent.pageScrollState !== 'idle');
           }}
           onPageSelected={(e) => {
-            setActiveIndex(e.nativeEvent.position);
-            setUiVisible(true); // Yeni videoya geçince UI'yi göster
+            const pos = e.nativeEvent.position;
+            setActiveIndex(pos);
+            setUiVisible(true);
+            setLastWatched(prev => ({ ...prev, [currentMode]: pos }));
+            AsyncStorage.setItem(`lastWatched_${currentMode}`, pos.toString());
           }}
         >
           {currentList.map((item, index) => (
@@ -602,33 +940,18 @@ export default function App() {
         </PagerView>
       )}
 
-      {/* Alt Bar - İndirme (Sadece UI açıkken ve bağlıyken görünür) */}
-      {isConnected && uiVisible && (
-        <View style={styles.bottomBar}>
-          {downloading ? (
-            <View style={styles.progressRow}>
-              <ActivityIndicator color="#fff" size="small" />
-              <Text style={styles.progressText}>{dlProgress}</Text>
-            </View>
-          ) : (
-            <TouchableOpacity style={styles.downloadBtn} onPress={downloadAll}>
-              <Text style={styles.downloadBtnText}>📥 Tümünü Cihaza İndir</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      )}
-      {/* Jump Modal */}
+      {/* Sayfa Atlama Modalı */}
       {showJumpPrompt && (
         <View style={styles.jumpOverlay}>
           <View style={styles.jumpBox}>
-            <Text style={styles.jumpTitle}>Reels'e Git (1 - {currentList.length})</Text>
+            <Text style={styles.jumpTitle}>Videoya Git (1 - {currentList.length})</Text>
             <TextInput
               style={styles.jumpInput}
               keyboardType="number-pad"
               autoFocus
               value={jumpIndex}
               onChangeText={setJumpIndex}
-              placeholder="Örn: 50"
+              placeholder="Örn: 25"
               placeholderTextColor="#888"
             />
             <View style={styles.jumpButtons}>
@@ -657,80 +980,118 @@ export default function App() {
   );
 }
 
+// ============================================
+// STYLES
+// ============================================
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
-  setupContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 30 },
-  setupLogo: { width: 100, height: 100, borderRadius: 50, marginBottom: 16, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)' },
-  setupTitle: { fontSize: 32, fontWeight: '800', color: '#fff', marginBottom: 40 },
-  inputGroup: { width: '100%', marginBottom: 20 },
-  inputLabel: { color: '#aaa', fontSize: 13, marginBottom: 8, marginLeft: 4, fontWeight: '600' },
-  input: { width: '100%', backgroundColor: 'rgba(255,255,255,0.1)', color: '#fff', padding: 18, borderRadius: 16, fontSize: 18, textAlign: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
-  connectBtn: { width: '100%', backgroundColor: '#3b82f6', padding: 18, borderRadius: 16, alignItems: 'center', marginTop: 10 },
-  connectBtnText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
-  offlineBtn: { width: '100%', backgroundColor: '#10b981', padding: 18, borderRadius: 16, alignItems: 'center', marginTop: 16 },
-  offlineBtnText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
-  deleteBtn: { width: '100%', padding: 16, marginTop: 40, alignItems: 'center', backgroundColor: 'rgba(239,68,68,0.1)', borderRadius: 16 },
-  deleteBtnText: { color: '#ef4444', fontSize: 15, fontWeight: 'bold' },
-  folderSection: { width: '100%', marginTop: 30, backgroundColor: 'rgba(255,255,255,0.05)', padding: 16, borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
-  folderTitle: { color: '#fff', fontSize: 15, fontWeight: 'bold', marginBottom: 8 },
-  folderPath: { color: '#aaa', fontSize: 13, marginBottom: 12 },
-  folderBtn: { backgroundColor: 'rgba(59,130,246,0.2)', padding: 12, borderRadius: 12, alignItems: 'center' },
-  folderBtnText: { color: '#3b82f6', fontSize: 14, fontWeight: 'bold' },
 
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 50, paddingBottom: 15, position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 },
-  backBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(10px)' },
-  backBtnText: { fontSize: 20 },
-  tabRow: { flexDirection: 'row', gap: 8, backgroundColor: 'rgba(0,0,0,0.4)', padding: 4, borderRadius: 24 },
-  tab: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20 },
-  tabActiveIg: { backgroundColor: '#E1306C' },
-  tabActiveTt: { backgroundColor: '#00f2ea' },
-  tabText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
-  counterContainer: { backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20 },
-  counter: { color: '#fff', fontSize: 14, fontWeight: 'bold', textAlign: 'center' },
+  // ANA MENÜ DASHBOARD STİLLERİ
+  menuContainer: { flex: 1, paddingTop: 55, paddingHorizontal: 20 },
+  menuHeader: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 20 },
+  menuLogo: { width: 50, height: 50, borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
+  menuTitle: { color: '#fff', fontSize: 24, fontWeight: '900', letterSpacing: -0.5 },
+  menuSubtitle: { color: '#888', fontSize: 13 },
 
-  jumpOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.7)', zIndex: 100, justifyContent: 'center', alignItems: 'center' },
-  jumpBox: { backgroundColor: '#1e1e1e', padding: 20, borderRadius: 20, width: '80%', alignItems: 'center' },
-  jumpTitle: { color: '#fff', fontSize: 16, fontWeight: 'bold', marginBottom: 15 },
-  jumpInput: { backgroundColor: '#333', color: '#fff', width: '100%', padding: 12, borderRadius: 10, textAlign: 'center', fontSize: 18, marginBottom: 20 },
-  jumpButtons: { flexDirection: 'row', width: '100%', justifyContent: 'space-between', gap: 10 },
-  jumpBtnCancel: { flex: 1, backgroundColor: '#555', padding: 12, borderRadius: 10, alignItems: 'center' },
-  jumpBtnGo: { flex: 1, backgroundColor: '#3b82f6', padding: 12, borderRadius: 10, alignItems: 'center' },
-  jumpBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
+  ipBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 16, padding: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', marginBottom: 20 },
+  ipLabel: { color: '#888', fontSize: 11, marginBottom: 2, fontWeight: '600' },
+  ipInput: { color: '#fff', fontSize: 16, fontWeight: 'bold', padding: 0 },
+  ipScanBtn: { backgroundColor: 'rgba(0, 242, 234, 0.15)', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(0, 242, 234, 0.4)', marginRight: 8 },
+  ipScanText: { color: '#00f2ea', fontWeight: 'bold', fontSize: 12 },
+  ipConnectBtn: { backgroundColor: '#3b82f6', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12 },
+  ipConnectText: { color: '#fff', fontWeight: 'bold', fontSize: 13 },
 
-  videoContainer: { flex: 1, backgroundColor: '#000' },
-  videoTouchable: { flex: 1 },
-  video: { width: '100%', height: '100%' },
+  sectionHeaderTitle: { color: '#aaa', fontSize: 13, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 12 },
+
+  // MOD KARTLARI
+  modeCard: { borderRadius: 20, borderWidth: 1.5, overflow: 'hidden', minHeight: 95 },
+  modeCardContent: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 14 },
+  modeIconCircle: { width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  modeCardTitle: { color: '#fff', fontSize: 18, fontWeight: '800' },
+  modeCardDesc: { color: '#999', fontSize: 12, marginTop: 2 },
+  modeCardBadge: { alignSelf: 'flex-start', color: '#ff5e62', backgroundColor: 'rgba(255,94,98,0.15)', fontSize: 11, fontWeight: 'bold', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, marginTop: 8 },
+  modeArrow: { color: '#555', fontSize: 28, fontWeight: '300', marginLeft: 6 },
+
+  quickDownloadBtn: { backgroundColor: '#00f2ea', borderRadius: 16, padding: 16, alignItems: 'center', marginTop: 10 },
+  quickDownloadText: { color: '#000', fontWeight: '900', fontSize: 14 },
+  deleteOfflineBtn: { alignItems: 'center', padding: 14, marginTop: 6 },
+
+  // MİNİMAL REELS HUD (SIĞMA PROBLEMİ OLMAYAN)
+  minimalHeader: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 50, paddingTop: 50, paddingHorizontal: 16, paddingBottom: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  hudBackBtn: { backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
+  hudBackText: { color: '#fff', fontWeight: 'bold', fontSize: 13 },
+  hudPlatformBadge: { backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
+  hudPlatformText: { color: '#00f2ea', fontWeight: '800', fontSize: 12, letterSpacing: 0.5 },
+  hudCounterBtn: { backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
+  hudCounterText: { color: '#fff', fontWeight: 'bold', fontSize: 13 },
+
+  // VIDEO VE KONTROLLER
+  videoContainer: { flex: 1, backgroundColor: '#000', overflow: 'hidden' },
+  video: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   gradientOverlay: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0 },
-  
-  pauseIconContainer: { position: 'absolute', top: '50%', left: '50%', marginTop: -40, marginLeft: -40, width: 80, height: 80, borderRadius: 40, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center' },
-  pauseIcon: { fontSize: 40, color: '#fff' },
-  
-  speedUpOverlay: { position: 'absolute', top: 120, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.7)', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 25 },
-  speedUpText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
-  
-  sideActions: { position: 'absolute', right: 16, bottom: 160, zIndex: 10 },
-  sideBtn: { alignItems: 'center', gap: 6, marginBottom: 20 },
-  iconCircle: { width: 50, height: 50, borderRadius: 25, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
-  iconText: { fontSize: 24 },
-  sideLabel: { color: '#fff', fontSize: 12, fontWeight: 'bold', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: {width: 1, height: 1}, textShadowRadius: 3 },
-  
-  videoInfo: { position: 'absolute', bottom: 100, left: 16, right: 80, zIndex: 10 },
-  badge: { alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12, marginBottom: 8 },
+  pauseIconContainer: { position: 'absolute', top: '50%', left: '50%', marginTop: -25, marginLeft: -75, width: 150, height: 50, borderRadius: 25, backgroundColor: 'rgba(0,0,0,0.7)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
+  pauseIconText: { color: '#fff', fontSize: 13, fontWeight: 'bold', letterSpacing: 1 },
+  speedUpOverlay: { position: 'absolute', top: 120, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.7)', paddingHorizontal: 18, paddingVertical: 8, borderRadius: 20 },
+  speedUpText: { color: '#00f2ea', fontWeight: 'bold', fontSize: 15 },
+
+  sideActions: { position: 'absolute', right: 14, bottom: 120, zIndex: 10, gap: 14 },
+  sideBtn: { alignItems: 'center' },
+  iconCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
+  actionBtnLabel: { color: '#fff', fontSize: 11, fontWeight: '800' },
+
+  videoInfo: { position: 'absolute', bottom: 70, left: 16, right: 75, zIndex: 10 },
+  badge: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 8 },
   badgeLocal: { backgroundColor: '#10b981' },
   badgeServer: { backgroundColor: '#3b82f6' },
-  badgeText: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
-  videoName: { color: '#fff', fontSize: 15, fontWeight: '600', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: {width: 1, height: 1}, textShadowRadius: 3 },
-  
-  scrubberContainer: { position: 'absolute', bottom: 65, left: 16, right: 16, flexDirection: 'row', alignItems: 'center', zIndex: 10 },
-  slider: { flex: 1, marginHorizontal: 10, height: 40 },
-  timeText: { color: '#fff', fontSize: 13, fontWeight: 'bold', width: 45, textAlign: 'center', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: {width: 1, height: 1}, textShadowRadius: 3 },
+  badgeText: { color: '#fff', fontSize: 11, fontWeight: 'bold' },
+  videoName: { color: '#fff', fontSize: 14, fontWeight: '700', textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: {width: 1, height: 1}, textShadowRadius: 3 },
 
-  emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  emptyTitle: { color: '#fff', fontSize: 20 },
-  
-  bottomBar: { position: 'absolute', bottom: 0, left: 0, right: 0, padding: 16, paddingBottom: 24, backgroundColor: 'rgba(0,0,0,0.85)' },
-  downloadBtn: { backgroundColor: '#fff', padding: 16, borderRadius: 16, alignItems: 'center' },
-  downloadBtnText: { color: '#000', fontWeight: '900', fontSize: 16 },
-  progressRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, padding: 16 },
-  progressText: { color: '#fff', fontSize: 14, fontWeight: 'bold' },
+  scrubberContainer: { position: 'absolute', bottom: 25, left: 12, right: 12, flexDirection: 'row', alignItems: 'center', zIndex: 10 },
+  slider: { flex: 1, marginHorizontal: 8, height: 35 },
+  timeText: { color: '#ddd', fontSize: 11, fontWeight: 'bold', width: 40, textAlign: 'center' },
+
+  // YOUTUBE HUB STİLLERİ
+  ytHubContainer: { flex: 1, backgroundColor: '#090a0f', paddingTop: 50 },
+  ytHeaderBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 14 },
+  ytBackBtn: { backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14 },
+  ytBackBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 13 },
+  ytHeaderTitle: { color: '#fff', fontSize: 16, fontWeight: '800' },
+  ytCountBadge: { backgroundColor: '#ef4444', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
+  ytCountText: { color: '#fff', fontSize: 11, fontWeight: 'bold' },
+
+  ytPlayerSection: { backgroundColor: '#000', borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.1)' },
+  ytVideoWrapper: { width: '100%', height: width * (9 / 16), backgroundColor: '#000' },
+  ytVideoView: { width: '100%', height: '100%' },
+  ytPlayerMeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12, backgroundColor: '#12131c' },
+  ytActiveTitle: { color: '#fff', fontSize: 13, fontWeight: 'bold' },
+  ytActiveSub: { color: '#777', fontSize: 11, marginTop: 3 },
+  ytFullscreenBtn: { padding: 8, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 8, marginLeft: 8 },
+  ytNoSelection: { width: '100%', height: 160, justifyContent: 'center', alignItems: 'center', backgroundColor: '#12131c' },
+
+  ytScrollView: { flex: 1 },
+  ytScrollContent: { padding: 14, gap: 10, paddingBottom: 40 },
+  ytCard: { flexDirection: 'row', backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', overflow: 'hidden', padding: 8, gap: 10 },
+  ytCardActive: { borderColor: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.1)' },
+  ytThumbnailBox: { width: 110, height: 68, borderRadius: 8, overflow: 'hidden', justifyContent: 'center', alignItems: 'center', backgroundColor: '#181822' },
+  ytPlayIconBadge: { width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(239, 68, 68, 0.9)', justifyContent: 'center', alignItems: 'center', paddingLeft: 2 },
+  ytBadgeDuration: { position: 'absolute', bottom: 3, right: 3, backgroundColor: 'rgba(0,0,0,0.8)', paddingHorizontal: 4, paddingVertical: 1, borderRadius: 3 },
+  ytCardDetails: { flex: 1, justifyContent: 'space-between', paddingVertical: 2 },
+  ytCardTitle: { color: '#eee', fontSize: 12, fontWeight: '600', lineHeight: 16 },
+  ytCardMetaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 },
+  ytCardSize: { color: '#666', fontSize: 10 },
+  ytNowPlayingBadge: { backgroundColor: '#ef4444', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  ytNowPlayingText: { color: '#fff', fontSize: 9, fontWeight: 'bold' },
+
+  // MODAL & JUMP
+  jumpOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.75)', zIndex: 100, justifyContent: 'center', alignItems: 'center' },
+  jumpBox: { backgroundColor: '#181924', padding: 22, borderRadius: 20, width: '80%', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+  jumpTitle: { color: '#fff', fontSize: 16, fontWeight: 'bold', marginBottom: 15 },
+  jumpInput: { backgroundColor: 'rgba(255,255,255,0.08)', color: '#fff', width: '100%', padding: 12, borderRadius: 12, textAlign: 'center', fontSize: 18, marginBottom: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
+  jumpButtons: { flexDirection: 'row', width: '100%', justifyContent: 'space-between', gap: 10 },
+  jumpBtnCancel: { flex: 1, backgroundColor: 'rgba(255,255,255,0.1)', padding: 12, borderRadius: 12, alignItems: 'center' },
+  jumpBtnGo: { flex: 1, backgroundColor: '#00f2ea', padding: 12, borderRadius: 12, alignItems: 'center' },
+  jumpBtnText: { color: '#000', fontWeight: 'bold', fontSize: 14 },
+
+  emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
+  emptyTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
 });

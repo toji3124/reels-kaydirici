@@ -88,6 +88,84 @@ tabs.forEach(tab => {
 });
 
 // ============================================
+// PROFILE TAB LOGIC
+// ============================================
+const profileInput = document.getElementById('profileInput');
+const profileLimit = document.getElementById('profileLimit');
+const fetchProfileBtn = document.getElementById('fetchProfileBtn');
+const profileResultsSection = document.getElementById('profileResultsSection');
+const profileTitleText = document.getElementById('profileTitleText');
+const profileVideoCountBadge = document.getElementById('profileVideoCountBadge');
+const profileVideosList = document.getElementById('profileVideosList');
+const downloadAllProfileVideosBtn = document.getElementById('downloadAllProfileVideosBtn');
+
+let currentProfileVideos = [];
+
+if (fetchProfileBtn) {
+    fetchProfileBtn.addEventListener('click', async () => {
+        const url = (profileInput ? profileInput.value : '').trim();
+        if (!url) {
+            showToast('Lütfen bir profil linki veya kullanıcı adı girin.', 'error');
+            return;
+        }
+
+        const limit = parseInt(profileLimit ? profileLimit.value : '50', 10);
+        fetchProfileBtn.disabled = true;
+        fetchProfileBtn.innerHTML = '<span class="spinner"></span> Taranıyor...';
+
+        try {
+            const res = await fetch('/api/fetch-profile', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url, limit })
+            });
+            const data = await res.json();
+
+            if (data.success && data.videos && data.videos.length > 0) {
+                currentProfileVideos = data.videos;
+                profileTitleText.textContent = `@${data.uploader} (${data.platform.toUpperCase()})`;
+                profileVideoCountBadge.textContent = `${data.count} video bulundu`;
+                
+                profileVideosList.innerHTML = data.videos.map((v, i) => `
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: rgba(255,255,255,0.05); border-radius: 6px; margin-bottom: 6px;">
+                        <div style="font-size: 13px; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 80%;">
+                            <span style="color: #f59e0b; margin-right: 6px;">#${i+1}</span> ${v.title}
+                        </div>
+                        <a href="${v.url}" target="_blank" style="color: #3b82f6; font-size: 11px; text-decoration: none;">Aç ↗</a>
+                    </div>
+                `).join('');
+
+                profileResultsSection.style.display = 'block';
+                showToast(`${data.count} video başarıyla çekildi!`, 'success');
+            } else {
+                showToast(data.error || 'Bu profilde video bulunamadı veya profil gizli.', 'error');
+            }
+        } catch (err) {
+            showToast('Hata: ' + err.message, 'error');
+        } finally {
+            fetchProfileBtn.disabled = false;
+            fetchProfileBtn.textContent = '⚡ Videoları Çek';
+        }
+    });
+}
+
+if (downloadAllProfileVideosBtn) {
+    downloadAllProfileVideosBtn.addEventListener('click', async () => {
+        if (!currentProfileVideos || currentProfileVideos.length === 0) return;
+        
+        const urlsText = currentProfileVideos.map(v => v.url).join('\n');
+        linksInput.value = urlsText;
+        linksInput.dispatchEvent(new Event('input'));
+        
+        const tabManualBtn = document.getElementById('tabManual');
+        if (tabManualBtn) tabManualBtn.click();
+        
+        showToast('Videolar indirme kuyruğuna aktarıldı, başlatılıyor...', 'info');
+        processBtn.click();
+    });
+}
+
+// ============================================
 // MANUAL INPUT TAB
 // ============================================
 linksInput.addEventListener('input', () => {
@@ -533,6 +611,142 @@ if (qrModal) {
 }
 
 // ============================================
+// COOKIE MODAL LOGIC
+// ============================================
+const showCookieBtn = document.getElementById('showCookieBtn');
+const cookieModal = document.getElementById('cookieModal');
+const closeCookieBtn = document.getElementById('closeCookieBtn');
+const cookieStatusBadge = document.getElementById('cookieStatusBadge');
+const cookieStatusText = document.getElementById('cookieStatusText');
+const cookieFileInput = document.getElementById('cookieFileInput');
+const cookieTextInput = document.getElementById('cookieTextInput');
+const saveCookieBtn = document.getElementById('saveCookieBtn');
+const deleteCookieBtn = document.getElementById('deleteCookieBtn');
+
+async function checkCookieStatus() {
+    try {
+        const res = await fetch('/api/cookies');
+        const data = await res.json();
+        if (data.exists) {
+            if (cookieStatusBadge) {
+                cookieStatusBadge.textContent = 'Aktif';
+                cookieStatusBadge.style.color = '#10b981';
+            }
+            if (cookieStatusText) {
+                const kb = (data.size / 1024).toFixed(1);
+                cookieStatusText.textContent = `cookies.txt aktif (${kb} KB)`;
+                cookieStatusText.style.color = '#10b981';
+            }
+            if (deleteCookieBtn) deleteCookieBtn.style.display = 'inline-block';
+        } else {
+            if (cookieStatusBadge) {
+                cookieStatusBadge.textContent = 'Yok';
+                cookieStatusBadge.style.color = '#ef4444';
+            }
+            if (cookieStatusText) {
+                cookieStatusText.textContent = 'cookies.txt bulunamadı';
+                cookieStatusText.style.color = '#ef4444';
+            }
+            if (deleteCookieBtn) deleteCookieBtn.style.display = 'none';
+        }
+    } catch (err) {
+        console.error('Cookie status check error:', err);
+    }
+}
+
+if (showCookieBtn) {
+    showCookieBtn.addEventListener('click', () => {
+        checkCookieStatus();
+        if (cookieModal) cookieModal.style.display = 'flex';
+    });
+}
+
+if (closeCookieBtn) {
+    closeCookieBtn.addEventListener('click', () => {
+        if (cookieModal) cookieModal.style.display = 'none';
+    });
+}
+
+if (cookieModal) {
+    cookieModal.addEventListener('click', (e) => {
+        if (e.target === cookieModal) cookieModal.style.display = 'none';
+    });
+}
+
+// Dosya seçilirse içeriğini textarea'ya aktar
+if (cookieFileInput) {
+    cookieFileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                if (cookieTextInput) cookieTextInput.value = event.target.result;
+            };
+            reader.readAsText(file);
+        }
+    });
+}
+
+// Cookie Kaydet
+if (saveCookieBtn) {
+    saveCookieBtn.addEventListener('click', async () => {
+        const text = cookieTextInput ? cookieTextInput.value.trim() : '';
+        if (!text) {
+            showToast('Lütfen önce bir cookie metni yapıştırın veya dosya seçin.', 'error');
+            return;
+        }
+
+        try {
+            saveCookieBtn.disabled = true;
+            saveCookieBtn.textContent = 'Kaydediliyor...';
+
+            const res = await fetch('/api/cookies', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cookies: text })
+            });
+
+            const data = await res.json();
+            if (data.success) {
+                showToast('cookies.txt başarıyla kaydedildi! Videolar artık bu cookie ile indirilecek.', 'success');
+                if (cookieTextInput) cookieTextInput.value = '';
+                if (cookieFileInput) cookieFileInput.value = '';
+                await checkCookieStatus();
+                if (cookieModal) cookieModal.style.display = 'none';
+            } else {
+                showToast(data.error || 'Kaydedilemedi.', 'error');
+            }
+        } catch (err) {
+            showToast('Bağlantı hatası: ' + err.message, 'error');
+        } finally {
+            saveCookieBtn.disabled = false;
+            saveCookieBtn.textContent = '💾 Cookie\'yi Kaydet';
+        }
+    });
+}
+
+// Cookie Sil
+if (deleteCookieBtn) {
+    deleteCookieBtn.addEventListener('click', async () => {
+        if (!confirm('cookies.txt dosyasını silmek istediğinize emin misiniz?')) return;
+
+        try {
+            const res = await fetch('/api/cookies', { method: 'DELETE' });
+            const data = await res.json();
+            if (data.success) {
+                showToast('cookies.txt silindi.', 'info');
+                await checkCookieStatus();
+            } else {
+                showToast(data.error || 'Silinemedi.', 'error');
+            }
+        } catch (err) {
+            showToast('Hata: ' + err.message, 'error');
+        }
+    });
+}
+
+// ============================================
 // INIT
 // ============================================
 fetchCollectedLinks(); // Initial fetch for badge
+checkCookieStatus(); // Check cookie status on load
