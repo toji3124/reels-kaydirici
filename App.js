@@ -60,6 +60,15 @@ function formatTime(seconds) {
   return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
 }
 
+function getCleanTitle(filename) {
+  if (!filename) return '';
+  return filename
+    .replace(/^([a-zA-Z0-9]+)_[^_]+_\d+_/, '')
+    .replace(/^([a-zA-Z0-9]+)_\d+_/, '')
+    .replace(/\.mp4$/i, '')
+    .trim() || filename.replace(/\.mp4$/i, '');
+}
+
 // ============================================
 // REELS / TIKTOK SLIDE
 // ============================================
@@ -267,7 +276,7 @@ function ActiveVideoSlide({ item, index, activeIndex, serverIp, onDelete, uiVisi
                 </View>
               )}
             </View>
-            <Text style={styles.videoName} numberOfLines={2}>{item.name.replace('.mp4', '')}</Text>
+            <Text style={styles.videoName} numberOfLines={1} ellipsizeMode="tail">{getCleanTitle(item.name)}</Text>
           </View>
 
           {/* Zarif Alt Scrubber */}
@@ -412,16 +421,7 @@ function YouTubeHub({ list, serverIp, onBack, onDelete }) {
       {/* 16:9 YouTube Video Oynatıcı */}
       {selectedVideo ? (
         <View style={styles.ytPlayerSection}>
-          <Pressable 
-            style={styles.ytVideoWrapper} 
-            onPress={() => {
-              if (controlsVisible) {
-                setControlsVisible(false);
-              } else {
-                resetControlsTimer();
-              }
-            }}
-          >
+          <View style={styles.ytVideoWrapper}>
             <VideoView
               ref={videoViewRef}
               player={player}
@@ -430,11 +430,22 @@ function YouTubeHub({ list, serverIp, onBack, onDelete }) {
               nativeControls={false}
             />
 
-            {/* Custom Interactive Controls Overlay */}
-            {controlsVisible && (
+            {/* Controls Overlay or Tap to open */}
+            {!controlsVisible ? (
+              <Pressable 
+                style={StyleSheet.absoluteFill} 
+                onPress={resetControlsTimer} 
+              />
+            ) : (
               <View style={styles.ytControlsOverlay} pointerEvents="box-none">
+                {/* Backdrop tap to close */}
+                <Pressable 
+                  style={StyleSheet.absoluteFill} 
+                  onPress={() => setControlsVisible(false)} 
+                />
+
                 {/* Center Controls: -10s, Play/Pause, +10s */}
-                <View style={styles.ytCenterControlsRow}>
+                <View style={styles.ytCenterControlsRow} pointerEvents="box-none">
                   <TouchableOpacity style={styles.ytControlBtn} onPress={() => skipSeconds(-10)}>
                     <Text style={styles.ytControlBtnText}>-10s</Text>
                   </TouchableOpacity>
@@ -449,8 +460,8 @@ function YouTubeHub({ list, serverIp, onBack, onDelete }) {
                 </View>
 
                 {/* Bottom Scrubber & Buttons */}
-                <View style={styles.ytBottomBar}>
-                  <View style={styles.ytTimelineRow}>
+                <View style={styles.ytBottomBar} pointerEvents="box-none">
+                  <View style={styles.ytTimelineRow} pointerEvents="box-none">
                     <Text style={styles.ytTimeText}>{formatTime(progress)}</Text>
                     <Slider
                       style={{ flex: 1, height: 30 }}
@@ -465,7 +476,7 @@ function YouTubeHub({ list, serverIp, onBack, onDelete }) {
                     <Text style={styles.ytTimeText}>{formatTime(duration)}</Text>
                   </View>
 
-                  <View style={styles.ytQuickActionsRow}>
+                  <View style={styles.ytQuickActionsRow} pointerEvents="box-none">
                     <TouchableOpacity style={styles.ytSpeedBtn} onPress={cycleSpeed}>
                       <Text style={styles.ytSpeedBtnText}>⚡ {playbackSpeed}x</Text>
                     </TouchableOpacity>
@@ -476,13 +487,13 @@ function YouTubeHub({ list, serverIp, onBack, onDelete }) {
                 </View>
               </View>
             )}
-          </Pressable>
+          </View>
 
           {/* Video Başlığı & Meta */}
           <View style={styles.ytPlayerMeta}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.ytActiveTitle} numberOfLines={2}>
-                {selectedVideo.name.replace('.mp4', '')}
+              <Text style={styles.ytActiveTitle} numberOfLines={1} ellipsizeMode="tail">
+                {getCleanTitle(selectedVideo.name)}
               </Text>
               <Text style={styles.ytActiveSub}>
                 {selectedVideo.uploader && selectedVideo.uploader !== 'Genel' ? `@${selectedVideo.uploader} • ` : ''}
@@ -536,7 +547,7 @@ function YouTubeHub({ list, serverIp, onBack, onDelete }) {
                 {/* Video Başlığı & Detaylar */}
                 <View style={styles.ytCardDetails}>
                   <Text style={[styles.ytCardTitle, isPlaying && { color: '#ef4444' }]} numberOfLines={2}>
-                    {item.name.replace('.mp4', '')}
+                    {getCleanTitle(item.name)}
                   </Text>
                   <View style={styles.ytCardMetaRow}>
                     <Text style={styles.ytCardSize}>{item.uploader ? `@${item.uploader} • ` : ''}{sizeMb || 'Video'}</Text>
@@ -1159,19 +1170,19 @@ const styles = StyleSheet.create({
   speedUpOverlay: { position: 'absolute', top: 120, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.7)', paddingHorizontal: 18, paddingVertical: 8, borderRadius: 20 },
   speedUpText: { color: '#00f2ea', fontWeight: 'bold', fontSize: 15 },
 
-  sideActions: { position: 'absolute', right: 14, bottom: 120, zIndex: 10, gap: 14 },
+  sideActions: { position: 'absolute', right: 14, bottom: 155, zIndex: 35, gap: 14 },
   sideBtn: { alignItems: 'center' },
   iconCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
   actionBtnLabel: { color: '#fff', fontSize: 11, fontWeight: '800' },
 
-  videoInfo: { position: 'absolute', bottom: 70, left: 16, right: 75, zIndex: 10 },
+  videoInfo: { position: 'absolute', bottom: 85, left: 16, right: 80, zIndex: 25 },
   badge: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 8 },
   badgeLocal: { backgroundColor: '#10b981' },
   badgeServer: { backgroundColor: '#3b82f6' },
   badgeText: { color: '#fff', fontSize: 11, fontWeight: 'bold' },
   videoName: { color: '#fff', fontSize: 14, fontWeight: '700', textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: {width: 1, height: 1}, textShadowRadius: 3 },
 
-  scrubberContainer: { position: 'absolute', bottom: 25, left: 12, right: 12, flexDirection: 'row', alignItems: 'center', zIndex: 10 },
+  scrubberContainer: { position: 'absolute', bottom: 35, left: 14, right: 14, flexDirection: 'row', alignItems: 'center', zIndex: 30 },
   slider: { flex: 1, marginHorizontal: 8, height: 35 },
   timeText: { color: '#ddd', fontSize: 11, fontWeight: 'bold', width: 40, textAlign: 'center' },
 
