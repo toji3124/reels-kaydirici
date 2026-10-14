@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { 
   StyleSheet, Text, View, Dimensions, 
   TouchableOpacity, TextInput, ActivityIndicator, 
-  Alert, StatusBar, Pressable, LogBox, Image, ScrollView 
+  Alert, StatusBar, Pressable, LogBox, Image, ScrollView, Modal 
 } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -421,6 +421,7 @@ function YouTubeHub({ list, serverIp, onBack, onDelete }) {
       {/* 16:9 YouTube Video Oynatıcı */}
       {selectedVideo ? (
         <View style={styles.ytPlayerSection}>
+          {/* Video Container (16:9) */}
           <View style={styles.ytVideoWrapper}>
             <VideoView
               ref={videoViewRef}
@@ -428,76 +429,79 @@ function YouTubeHub({ list, serverIp, onBack, onDelete }) {
               style={styles.ytVideoView}
               contentFit="contain"
               nativeControls={false}
+              allowsFullscreen={true}
             />
 
-            {/* Controls Overlay or Tap to open */}
-            {!controlsVisible ? (
-              <Pressable 
-                style={StyleSheet.absoluteFill} 
-                onPress={resetControlsTimer} 
-              />
-            ) : (
-              <View style={styles.ytControlsOverlay} pointerEvents="box-none">
-                {/* Backdrop tap to close */}
-                <Pressable 
-                  style={StyleSheet.absoluteFill} 
-                  onPress={() => setControlsVisible(false)} 
-                />
-
-                {/* Center Controls: -10s, Play/Pause, +10s */}
-                <View style={styles.ytCenterControlsRow} pointerEvents="box-none">
-                  <TouchableOpacity style={styles.ytControlBtn} onPress={() => skipSeconds(-10)}>
-                    <Text style={styles.ytControlBtnText}>-10s</Text>
-                  </TouchableOpacity>
-                  
-                  <TouchableOpacity style={styles.ytPlayPauseBtn} onPress={togglePlayPause}>
-                    <Text style={styles.ytPlayPauseText}>{isPaused ? '▶' : '⏸'}</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity style={styles.ytControlBtn} onPress={() => skipSeconds(10)}>
-                    <Text style={styles.ytControlBtnText}>+10s</Text>
-                  </TouchableOpacity>
+            {/* Video Ekranı Tıklama Alanı (Oynat / Durdur) */}
+            <Pressable style={styles.ytVideoTouchArea} onPress={togglePlayPause}>
+              {isPaused && (
+                <View style={styles.ytBigPlayBadge} pointerEvents="none">
+                  <Text style={styles.ytBigPlayIcon}>▶</Text>
                 </View>
+              )}
+            </Pressable>
 
-                {/* Bottom Scrubber & Buttons */}
-                <View style={styles.ytBottomBar} pointerEvents="box-none">
-                  <View style={styles.ytTimelineRow} pointerEvents="box-none">
-                    <Text style={styles.ytTimeText}>{formatTime(progress)}</Text>
-                    <Slider
-                      style={{ flex: 1, height: 30 }}
-                      minimumValue={0}
-                      maximumValue={duration > 0 ? duration : 1}
-                      value={progress}
-                      onValueChange={handleSeek}
-                      minimumTrackTintColor="#ef4444"
-                      maximumTrackTintColor="rgba(255,255,255,0.3)"
-                      thumbTintColor="#ef4444"
-                    />
-                    <Text style={styles.ytTimeText}>{formatTime(duration)}</Text>
-                  </View>
-
-                  <View style={styles.ytQuickActionsRow} pointerEvents="box-none">
-                    <TouchableOpacity style={styles.ytSpeedBtn} onPress={cycleSpeed}>
-                      <Text style={styles.ytSpeedBtnText}>⚡ {playbackSpeed}x</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.ytSpeedBtn} onPress={toggleFullscreen}>
-                      <Text style={styles.ytSpeedBtnText}>⛶ Tam Ekran</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </View>
-            )}
+            {/* Doğrudan Video Üzeri Sağ Üst Tam Ekran Butonu */}
+            <TouchableOpacity 
+              style={styles.ytFloatingFullscreenBtn} 
+              onPress={toggleFullscreen}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.ytFloatingFullscreenText}>⛶ Tam Ekran</Text>
+            </TouchableOpacity>
           </View>
 
-          {/* Video Başlığı & Meta */}
+          {/* DEDİKASYON KONTROL PANELİ (Videonun Altında - Asla Arkada Kalmaz!) */}
+          <View style={styles.ytControlsDeck}>
+            {/* 1. Satır: Zaman Çubuğu (Scrubber Bar) */}
+            <View style={styles.ytTimelineDeckRow}>
+              <Text style={styles.ytTimeDeckText}>{formatTime(progress)}</Text>
+              <Slider
+                style={styles.ytSliderDeck}
+                minimumValue={0}
+                maximumValue={duration > 0 ? duration : 1}
+                value={progress}
+                onValueChange={handleSeek}
+                minimumTrackTintColor="#ef4444"
+                maximumTrackTintColor="rgba(255,255,255,0.25)"
+                thumbTintColor="#ef4444"
+              />
+              <Text style={styles.ytTimeDeckText}>{formatTime(duration)}</Text>
+            </View>
+
+            {/* 2. Satır: Tuşlar: -10s, OYNAT/DURDUR, +10s, Hız, Tam Ekran */}
+            <View style={styles.ytButtonsDeckRow}>
+              <TouchableOpacity style={styles.ytDeckBtn} onPress={() => skipSeconds(-10)}>
+                <Text style={styles.ytDeckBtnText}>⏪ -10s</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.ytDeckPlayBtn} onPress={togglePlayPause}>
+                <Text style={styles.ytDeckPlayText}>{isPaused ? '▶ OYNAT' : '⏸ DURDUR'}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.ytDeckBtn} onPress={() => skipSeconds(10)}>
+                <Text style={styles.ytDeckBtnText}>+10s ⏩</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.ytDeckSpeedBtn} onPress={cycleSpeed}>
+                <Text style={styles.ytDeckSpeedText}>⚡ {playbackSpeed}x</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.ytDeckFullscreenBtn} onPress={toggleFullscreen}>
+                <Text style={styles.ytDeckFullscreenText}>⛶ Tam Ekran</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Video Başlığı & Meta Bilgisi */}
           <View style={styles.ytPlayerMeta}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.ytActiveTitle} numberOfLines={1} ellipsizeMode="tail">
+              <Text style={styles.ytActiveTitle} numberOfLines={2}>
                 {getCleanTitle(selectedVideo.name)}
               </Text>
               <Text style={styles.ytActiveSub}>
                 {selectedVideo.uploader && selectedVideo.uploader !== 'Genel' ? `@${selectedVideo.uploader} • ` : ''}
-                {selectedVideo.isLocal ? 'Offline' : 'Sunucu'}
+                {selectedVideo.isLocal ? 'Offline (Cihazda)' : 'Sunucu'}
                 {selectedVideo.size ? ` • ${(selectedVideo.size / (1024*1024)).toFixed(1)} MB` : ''}
               </Text>
             </View>
@@ -579,6 +583,13 @@ export default function App() {
   const [isScanning, setIsScanning] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [dlProgress, setDlProgress] = useState('');
+  const [showDlModal, setShowDlModal] = useState(false);
+  const [dlCurrentFile, setDlCurrentFile] = useState('');
+  const [dlCurrentIdx, setDlCurrentIdx] = useState(0);
+  const [dlTotalFiles, setDlTotalFiles] = useState(0);
+  const [dlDoneFiles, setDlDoneFiles] = useState([]);
+  const [dlSkippedFiles, setDlSkippedFiles] = useState(0);
+  const dlCancelRef = useRef(false);
   
   // Mod: 'menu' (Ana Menü), 'instagram' (Reels), 'tiktok' (TikTok), 'youtube' (YouTube Stüdyo)
   const [currentMode, setCurrentMode] = useState('menu');
@@ -725,17 +736,28 @@ export default function App() {
       await AsyncStorage.setItem('downloadFolderUri', folderUri);
     }
 
+    // Modal'ı aç ve başlangıç state'lerini ayarla
+    dlCancelRef.current = false;
     setDownloading(true);
+    setShowDlModal(true);
+    setDlTotalFiles(serverVideos.length);
+    setDlDoneFiles([]);
+    setDlSkippedFiles(0);
     let count = 0;
+    let skipped = 0;
 
     for (let i = 0; i < serverVideos.length; i++) {
+      if (dlCancelRef.current) break;
+
       const file = serverVideos[i];
       const isTikTok = file.platform === 'tiktok' || file.name.includes('tiktok');
       const isYoutube = file.platform === 'youtube' || file.name.includes('youtube');
       const targetPlatform = isTikTok ? 'tiktok' : (isYoutube ? 'youtube' : 'instagram');
       const dir = FileSystem.documentDirectory + `reels/${targetPlatform}/`;
       const fileUri = dir + file.name;
-      
+
+      setDlCurrentIdx(i + 1);
+      setDlCurrentFile(getCleanTitle(file.name));
       setDlProgress(`${i + 1}/${serverVideos.length} indiriliyor...`);
 
       const exists = await FileSystem.getInfoAsync(fileUri);
@@ -748,13 +770,24 @@ export default function App() {
           const newFileUri = await FileSystem.StorageAccessFramework.createFileAsync(folderUri, file.name, 'video/mp4');
           await FileSystem.writeAsStringAsync(newFileUri, base64Data, { encoding: FileSystem.EncodingType.Base64 });
           count++;
-        } catch (e) {}
+          setDlDoneFiles(prev => [...prev, { name: getCleanTitle(file.name), platform: targetPlatform, status: 'ok' }]);
+        } catch (e) {
+          setDlDoneFiles(prev => [...prev, { name: getCleanTitle(file.name), platform: targetPlatform, status: 'error' }]);
+        }
+      } else {
+        skipped++;
+        setDlSkippedFiles(prev => prev + 1);
+        setDlDoneFiles(prev => [...prev, { name: getCleanTitle(file.name), platform: targetPlatform, status: 'skipped' }]);
       }
     }
 
     setDownloading(false);
     setDlProgress('');
-    Alert.alert('Tamamlandı!', `${count} video cihaza kaydedildi!`);
+    if (!dlCancelRef.current) {
+      setDlCurrentFile(`Tamamlandı! ${count} indirildi, ${skipped} zaten vardı.`);
+    } else {
+      setDlCurrentFile(`İptal edildi. ${count} indirildi.`);
+    }
     loadLocalVideos();
   };
 
@@ -954,9 +987,15 @@ export default function App() {
 
             {/* İndirme & Ayar Butonları */}
             {isConnected && (
-              <TouchableOpacity style={styles.quickDownloadBtn} onPress={downloadAll} disabled={downloading}>
+              <TouchableOpacity 
+                style={styles.quickDownloadBtn} 
+                onPress={downloading ? () => setShowDlModal(true) : downloadAll}
+              >
                 {downloading ? (
-                  <ActivityIndicator color="#000" size="small" />
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <ActivityIndicator color="#000" size="small" />
+                    <Text style={styles.quickDownloadText}>{dlProgress || 'İndiriliyor...'}</Text>
+                  </View>
                 ) : (
                   <Text style={styles.quickDownloadText}>Tüm Videoları İndir ({serverVideos.length})</Text>
                 )}
@@ -967,6 +1006,153 @@ export default function App() {
               <Text style={{ color: '#ef4444', fontWeight: 'bold', fontSize: 13 }}>İndirilenleri Temizle</Text>
             </TouchableOpacity>
           </ScrollView>
+
+          {/* İNDİRME İLERLEMESİ MODALI */}
+          <Modal
+            visible={showDlModal}
+            transparent={true}
+            animationType="fade"
+            onRequestClose={() => {
+              if (!downloading) setShowDlModal(false);
+            }}
+          >
+            <View style={styles.dlModalOverlay}>
+              <View style={styles.dlModalCard}>
+                {/* Başlık & Kapatma */}
+                <View style={styles.dlModalHeader}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Text style={{ fontSize: 22 }}>📥</Text>
+                    <View>
+                      <Text style={styles.dlModalTitle}>Video İndirme Yöneticisi</Text>
+                      <Text style={styles.dlModalSubtitle}>
+                        {downloading 
+                          ? `${dlCurrentIdx} / ${dlTotalFiles} işleniyor...` 
+                          : 'İşlem Tamamlandı'}
+                      </Text>
+                    </View>
+                  </View>
+                  {!downloading && (
+                    <TouchableOpacity onPress={() => setShowDlModal(false)} style={styles.dlCloseBtn}>
+                      <Text style={styles.dlCloseBtnText}>✕</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                {/* İlerleme Çubuğu */}
+                <View style={styles.dlProgressContainer}>
+                  <View style={styles.dlProgressBarBg}>
+                    <View 
+                      style={[
+                        styles.dlProgressBarFill, 
+                        { width: `${dlTotalFiles > 0 ? Math.min(100, Math.round((dlCurrentIdx / dlTotalFiles) * 100)) : 0}%` }
+                      ]} 
+                    />
+                  </View>
+                  <Text style={styles.dlPercentText}>
+                    %{dlTotalFiles > 0 ? Math.min(100, Math.round((dlCurrentIdx / dlTotalFiles) * 100)) : 0}
+                  </Text>
+                </View>
+
+                {/* Aktif Dosya Bilgisi */}
+                <View style={styles.dlCurrentFileBox}>
+                  {downloading ? (
+                    <ActivityIndicator size="small" color="#00f2ea" style={{ marginRight: 8 }} />
+                  ) : (
+                    <Text style={{ fontSize: 16, marginRight: 6 }}>✅</Text>
+                  )}
+                  <Text style={styles.dlCurrentFileName} numberOfLines={2}>
+                    {dlCurrentFile || 'Hazırlanıyor...'}
+                  </Text>
+                </View>
+
+                {/* İstatistik Rozetleri */}
+                <View style={styles.dlStatsRow}>
+                  <View style={[styles.dlStatBadge, { backgroundColor: 'rgba(16,185,129,0.15)' }]}>
+                    <Text style={[styles.dlStatText, { color: '#10b981' }]}>
+                      ✓ {dlDoneFiles.filter(f => f.status === 'ok').length} Yeni
+                    </Text>
+                  </View>
+                  <View style={[styles.dlStatBadge, { backgroundColor: 'rgba(245,158,11,0.15)' }]}>
+                    <Text style={[styles.dlStatText, { color: '#f59e0b' }]}>
+                      ⊘ {dlSkippedFiles} Zaten Var
+                    </Text>
+                  </View>
+                  <View style={[styles.dlStatBadge, { backgroundColor: 'rgba(239,68,68,0.15)' }]}>
+                    <Text style={[styles.dlStatText, { color: '#ef4444' }]}>
+                      ✗ {dlDoneFiles.filter(f => f.status === 'error').length} Hata
+                    </Text>
+                  </View>
+                </View>
+
+                {/* İndirilenler Listesi */}
+                <Text style={styles.dlListTitle}>İşlem Detayları ({dlDoneFiles.length})</Text>
+                <ScrollView style={styles.dlFilesList} contentContainerStyle={{ gap: 6 }}>
+                  {dlDoneFiles.length === 0 ? (
+                    <Text style={styles.dlEmptyListText}>İşlem başladığında indirilenler burada listelenecek...</Text>
+                  ) : (
+                    dlDoneFiles.slice().reverse().map((item, idx) => (
+                      <View key={idx} style={styles.dlFileRow}>
+                        <View style={[
+                          styles.dlPlatformTag,
+                          item.platform === 'youtube' ? { backgroundColor: 'rgba(239,68,68,0.2)' } :
+                          item.platform === 'tiktok' ? { backgroundColor: 'rgba(0,242,234,0.2)' } :
+                          { backgroundColor: 'rgba(225,48,108,0.2)' }
+                        ]}>
+                          <Text style={[
+                            styles.dlPlatformTagText,
+                            item.platform === 'youtube' ? { color: '#ef4444' } :
+                            item.platform === 'tiktok' ? { color: '#00f2ea' } :
+                            { color: '#e1306c' }
+                          ]}>
+                            {item.platform === 'youtube' ? 'YT' : item.platform === 'tiktok' ? 'TT' : 'IG'}
+                          </Text>
+                        </View>
+                        <Text style={styles.dlRowFileName} numberOfLines={1}>{item.name}</Text>
+                        <Text style={[
+                          styles.dlRowStatus,
+                          item.status === 'ok' ? { color: '#10b981' } :
+                          item.status === 'skipped' ? { color: '#f59e0b' } :
+                          { color: '#ef4444' }
+                        ]}>
+                          {item.status === 'ok' ? '✓ İndirildi' : item.status === 'skipped' ? '⊘ Mevcut' : '✗ Hata'}
+                        </Text>
+                      </View>
+                    ))
+                  )}
+                </ScrollView>
+
+                {/* Alt Aksiyon Butonları */}
+                <View style={styles.dlActionsRow}>
+                  {downloading ? (
+                    <>
+                      <TouchableOpacity 
+                        style={styles.dlCancelBtn} 
+                        onPress={() => {
+                          dlCancelRef.current = true;
+                          setDlCurrentFile('İndirme durduruluyor...');
+                        }}
+                      >
+                        <Text style={styles.dlCancelBtnText}>⏹ İndirmeyi Durdur</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity 
+                        style={styles.dlMinimizeBtn} 
+                        onPress={() => setShowDlModal(false)}
+                      >
+                        <Text style={styles.dlMinimizeBtnText}>Gizle</Text>
+                      </TouchableOpacity>
+                    </>
+                  ) : (
+                    <TouchableOpacity 
+                      style={styles.dlFinishBtn} 
+                      onPress={() => setShowDlModal(false)}
+                    >
+                      <Text style={styles.dlFinishBtnText}>Tamamla & Kapat</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+            </View>
+          </Modal>
 
         </LinearGradient>
       </View>
@@ -1198,22 +1384,30 @@ const styles = StyleSheet.create({
   ytPlayerSection: { backgroundColor: '#000', borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.1)' },
   ytVideoWrapper: { width: '100%', height: width * (9 / 16), backgroundColor: '#000', position: 'relative' },
   ytVideoView: { width: '100%', height: '100%' },
-  ytControlsOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'space-between', padding: 8 },
-  ytCenterControlsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 28, flex: 1 },
-  ytControlBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.15)', justifyContent: 'center', alignItems: 'center' },
-  ytControlBtnText: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
-  ytPlayPauseBtn: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#ef4444', justifyContent: 'center', alignItems: 'center', elevation: 4 },
-  ytPlayPauseText: { color: '#fff', fontSize: 22, fontWeight: 'bold' },
-  ytBottomBar: { width: '100%', paddingHorizontal: 4 },
-  ytTimelineRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  ytTimeText: { color: '#ddd', fontSize: 10, fontWeight: 'bold', minWidth: 35, textAlign: 'center' },
-  ytQuickActionsRow: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8, marginTop: 2 },
-  ytSpeedBtn: { backgroundColor: 'rgba(255,255,255,0.18)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
-  ytSpeedBtnText: { color: '#fff', fontSize: 11, fontWeight: 'bold' },
+  ytVideoTouchArea: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center', zIndex: 5 },
+  ytBigPlayBadge: { width: 64, height: 64, borderRadius: 32, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
+  ytBigPlayIcon: { color: '#fff', fontSize: 26, fontWeight: 'bold' },
+  ytFloatingFullscreenBtn: { position: 'absolute', bottom: 8, right: 8, zIndex: 10, backgroundColor: 'rgba(0,0,0,0.7)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
+  ytFloatingFullscreenText: { color: '#fff', fontSize: 11, fontWeight: 'bold' },
+
+  // Kontrol Deck (Videonun Altında - Asla Arkada Kalmaz)
+  ytControlsDeck: { backgroundColor: '#12131c', paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)' },
+  ytTimelineDeckRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
+  ytTimeDeckText: { color: '#aaa', fontSize: 11, fontWeight: 'bold', minWidth: 38, textAlign: 'center' },
+  ytSliderDeck: { flex: 1, height: 32 },
+  ytButtonsDeckRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, flexWrap: 'wrap' },
+  ytDeckBtn: { backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
+  ytDeckBtnText: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
+  ytDeckPlayBtn: { backgroundColor: '#ef4444', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 10, elevation: 3 },
+  ytDeckPlayText: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
+  ytDeckSpeedBtn: { backgroundColor: 'rgba(255,165,0,0.2)', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,165,0,0.3)' },
+  ytDeckSpeedText: { color: '#ffa500', fontSize: 11, fontWeight: 'bold' },
+  ytDeckFullscreenBtn: { backgroundColor: 'rgba(59,130,246,0.2)', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(59,130,246,0.3)' },
+  ytDeckFullscreenText: { color: '#3b82f6', fontSize: 11, fontWeight: 'bold' },
+
   ytPlayerMeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12, backgroundColor: '#12131c' },
   ytActiveTitle: { color: '#fff', fontSize: 13, fontWeight: 'bold' },
   ytActiveSub: { color: '#777', fontSize: 11, marginTop: 3 },
-  ytFullscreenBtn: { padding: 8, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 8, marginLeft: 8 },
   ytNoSelection: { width: '100%', height: 160, justifyContent: 'center', alignItems: 'center', backgroundColor: '#12131c' },
 
   ytScrollView: { flex: 1 },
@@ -1242,4 +1436,200 @@ const styles = StyleSheet.create({
 
   emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
   emptyTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+
+  // İNDİRME MODALI STİLLERİ
+  dlModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.82)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 18,
+  },
+  dlModalCard: {
+    width: '100%',
+    maxHeight: '85%',
+    backgroundColor: '#161824',
+    borderRadius: 24,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    elevation: 12,
+  },
+  dlModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  dlModalTitle: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  dlModalSubtitle: {
+    color: '#8b8e9f',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  dlCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dlCloseBtnText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  dlProgressContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 14,
+  },
+  dlProgressBarBg: {
+    flex: 1,
+    height: 8,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  dlProgressBarFill: {
+    height: '100%',
+    backgroundColor: '#00f2ea',
+    borderRadius: 4,
+  },
+  dlPercentText: {
+    color: '#00f2ea',
+    fontSize: 13,
+    fontWeight: 'bold',
+    minWidth: 40,
+    textAlign: 'right',
+  },
+  dlCurrentFileBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  dlCurrentFileName: {
+    flex: 1,
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  dlStatsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 6,
+    marginBottom: 14,
+  },
+  dlStatBadge: {
+    flex: 1,
+    paddingVertical: 6,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dlStatText: {
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+  dlListTitle: {
+    color: '#aaa',
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 6,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  dlFilesList: {
+    maxHeight: 180,
+    marginBottom: 14,
+  },
+  dlEmptyListText: {
+    color: '#666',
+    fontSize: 12,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    paddingVertical: 16,
+  },
+  dlFileRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 8,
+    gap: 8,
+  },
+  dlPlatformTag: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  dlPlatformTagText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  dlRowFileName: {
+    flex: 1,
+    color: '#ddd',
+    fontSize: 11,
+  },
+  dlRowStatus: {
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  dlActionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 4,
+  },
+  dlCancelBtn: {
+    flex: 2,
+    backgroundColor: 'rgba(239,68,68,0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(239,68,68,0.5)',
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  dlCancelBtnText: {
+    color: '#ef4444',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  dlMinimizeBtn: {
+    flex: 1,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  dlMinimizeBtnText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  dlFinishBtn: {
+    flex: 1,
+    backgroundColor: '#00f2ea',
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  dlFinishBtnText: {
+    color: '#000',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
 });
