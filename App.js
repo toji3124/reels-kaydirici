@@ -9,17 +9,30 @@ import * as FileSystem from 'expo-file-system/legacy';
 import Slider from '@react-native-community/slider';
 import PagerView from 'react-native-pager-view';
 import { LinearGradient } from 'expo-linear-gradient';
-import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
-import * as Notifications from 'expo-notifications';
 
-// Bildirim ayarları
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: false,
-    shouldSetBadge: false,
-  }),
-});
+// Güvenli import: Expo Go'da native modüller olmayabilir
+let activateKeepAwakeAsync = async () => {};
+let deactivateKeepAwake = () => {};
+let Notifications = null;
+
+try {
+  const keepAwake = require('expo-keep-awake');
+  activateKeepAwakeAsync = keepAwake.activateKeepAwakeAsync;
+  deactivateKeepAwake = keepAwake.deactivateKeepAwake;
+} catch (e) {}
+
+try {
+  Notifications = require('expo-notifications');
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: false,
+      shouldSetBadge: false,
+    }),
+  });
+} catch (e) {
+  Notifications = null;
+}
 
 // Güvenli Depolama (Expo Go & Native Uyumlu FileSystem Storage)
 const SafeStorage = {
@@ -762,11 +775,14 @@ export default function App() {
 
   // Bildirim izni al (uygulama başlangıcında bir kere)
   useEffect(() => {
+    if (!Notifications) return;
     (async () => {
-      const { status } = await Notifications.getPermissionsAsync();
-      if (status !== 'granted') {
-        await Notifications.requestPermissionsAsync();
-      }
+      try {
+        const { status } = await Notifications.getPermissionsAsync();
+        if (status !== 'granted') {
+          await Notifications.requestPermissionsAsync();
+        }
+      } catch (e) {}
     })();
   }, []);
 
@@ -774,8 +790,8 @@ export default function App() {
   const dlNotifIdRef = useRef(null);
 
   const updateDownloadNotification = async (current, total, fileName) => {
+    if (!Notifications) return;
     try {
-      // Önceki bildirimi kapat, yenisini göster
       if (dlNotifIdRef.current) {
         await Notifications.dismissNotificationAsync(dlNotifIdRef.current);
       }
@@ -786,12 +802,13 @@ export default function App() {
           data: { type: 'download_progress' },
           sticky: true,
         },
-        trigger: null, // hemen göster
+        trigger: null,
       });
     } catch (e) {}
   };
 
   const showDownloadCompleteNotification = async (count, skipped) => {
+    if (!Notifications) return;
     try {
       if (dlNotifIdRef.current) {
         await Notifications.dismissNotificationAsync(dlNotifIdRef.current);
