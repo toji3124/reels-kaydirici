@@ -2,13 +2,24 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { 
   StyleSheet, Text, View, Dimensions, 
   TouchableOpacity, TextInput, ActivityIndicator, 
-  Alert, StatusBar, Pressable, LogBox, Image, ScrollView, Modal 
+  Alert, StatusBar, Pressable, LogBox, Image, ScrollView, Modal, AppState 
 } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import * as FileSystem from 'expo-file-system/legacy';
 import Slider from '@react-native-community/slider';
 import PagerView from 'react-native-pager-view';
 import { LinearGradient } from 'expo-linear-gradient';
+import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
+import * as Notifications from 'expo-notifications';
+
+// Bildirim ayarları
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: false,
+    shouldSetBadge: false,
+  }),
+});
 
 // Güvenli Depolama (Expo Go & Native Uyumlu FileSystem Storage)
 const SafeStorage = {
@@ -721,20 +732,114 @@ export default function App() {
     setIsScanning(false);
   };
 
+  // Klasör seçme fonksiyonu (hem ilk seçim hem değiştirme için)
+  const pickDownloadFolder = async () => {
+    try {
+      const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+      if (!permissions.granted) return null;
+      const folderUri = permissions.directoryUri;
+      setSavedFolderUri(folderUri);
+      await AsyncStorage.setItem('downloadFolderUri', folderUri);
+      Alert.alert('Klasör Seçildi', 'İndirme klasörü başarıyla ayarlandı.');
+      return folderUri;
+    } catch (e) {
+      Alert.alert('Hata', 'Klasör seçilirken bir hata oluştu.');
+      return null;
+    }
+  };
+
+  // Klasörün geçerli olup olmadığını kontrol et
+  const validateFolder = async (folderUri) => {
+    if (!folderUri) return false;
+    try {
+      // SAF URI'nin geçerli olduğunu test et
+      await FileSystem.StorageAccessFramework.readDirectoryAsync(folderUri);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  };
+
+  // Bildirim izni al (uygulama başlangıcında bir kere)
+  useEffect(() => {
+    (async () => {
+      const { status } = await Notifications.getPermissionsAsync();
+      if (status !== 'granted') {
+        await Notifications.requestPermissionsAsync();
+      }
+    })();
+  }, []);
+
+  // İndirme bildirim ID'sini takip et
+  const dlNotifIdRef = useRef(null);
+
+  const updateDownloadNotification = async (current, total, fileName) => {
+    try {
+      // Önceki bildirimi kapat, yenisini göster
+      if (dlNotifIdRef.current) {
+        await Notifications.dismissNotificationAsync(dlNotifIdRef.current);
+      }
+      dlNotifIdRef.current = await Notifications.scheduleNotificationAsync({
+        content: {
+          title: `📥 İndirme: ${current}/${total}`,
+          body: fileName,
+          data: { type: 'download_progress' },
+          sticky: true,
+        },
+        trigger: null, // hemen göster
+      });
+    } catch (e) {}
+  };
+
+  const showDownloadCompleteNotification = async (count, skipped) => {
+    try {
+      if (dlNotifIdRef.current) {
+        await Notifications.dismissNotificationAsync(dlNotifIdRef.current);
+        dlNotifIdRef.current = null;
+      }
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: '✅ İndirme Tamamlandı',
+          body: `${count} video indirildi${skipped > 0 ? `, ${skipped} zaten vardı` : ''}`,
+          data: { type: 'download_complete' },
+        },
+        trigger: null,
+      });
+    } catch (e) {}
+  };
+
   const downloadAll = async () => {
     if (serverVideos.length === 0) {
       Alert.alert('Bilgi', 'Sunucuda indirilecek video bulunamadı.');
       return;
     }
 
+    // Klasör URI'sini al veya sor
     let folderUri = savedFolderUri || await AsyncStorage.getItem('downloadFolderUri');
-    if (!folderUri) {
-      const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
-      if (!permissions.granted) return;
-      folderUri = permissions.directoryUri;
-      setSavedFolderUri(folderUri);
-      await AsyncStorage.setItem('downloadFolderUri', folderUri);
+    
+    // Klasör geçerli mi kontrol et
+    if (folderUri) {
+      const isValid = await validateFolder(folderUri);
+      if (!isValid) {
+        Alert.alert(
+          'Klasör Hatası',
+          'Önceki indirme klasörü artık geçerli değil. Lütfen yeni bir klasör seçin.',
+        );
+        folderUri = null;
+        setSavedFolderUri(null);
+        await AsyncStorage.removeItem('downloadFolderUri');
+      }
     }
+    
+    if (!folderUri) {
+      folderUri = await pickDownloadFolder();
+      if (!folderUri) return;
+    }
+
+    // Arka plan desteği: Ekranı uyanık tut + bildirim göster
+    try {
+      await activateKeepAwakeAsync('download');
+    } catch (e) {}
 
     // Modal'ı aç ve başlangıç state'lerini ayarla
     dlCancelRef.current = false;
@@ -760,15 +865,34 @@ export default function App() {
       setDlCurrentFile(getCleanTitle(file.name));
       setDlProgress(`${i + 1}/${serverVideos.length} indiriliyor...`);
 
+      // Bildirim güncelle (arka planda da görünsün)
+      await updateDownloadNotification(i + 1, serverVideos.length, getCleanTitle(file.name));
+
+      // Klasörü oluştur (her seferinde kontrol et)
+      try {
+        const dirInfo = await FileSystem.getInfoAsync(dir);
+        if (!dirInfo.exists) {
+          await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+        }
+      } catch (e) {}
+
       const exists = await FileSystem.getInfoAsync(fileUri);
       if (!exists.exists) {
         try {
           const cleanIp = serverIp.trim();
           let downloadUrl = cleanIp.startsWith('http') ? `${cleanIp}${file.path}` : `http://${cleanIp}:3000${file.path}`;
+          // Önce dahili depolamaya indir
           const downloadRes = await FileSystem.downloadAsync(downloadUrl, fileUri);
-          const base64Data = await FileSystem.readAsStringAsync(downloadRes.uri, { encoding: FileSystem.EncodingType.Base64 });
-          const newFileUri = await FileSystem.StorageAccessFramework.createFileAsync(folderUri, file.name, 'video/mp4');
-          await FileSystem.writeAsStringAsync(newFileUri, base64Data, { encoding: FileSystem.EncodingType.Base64 });
+          
+          // Sonra SAF ile harici klasöre kopyala
+          try {
+            const base64Data = await FileSystem.readAsStringAsync(downloadRes.uri, { encoding: FileSystem.EncodingType.Base64 });
+            const newFileUri = await FileSystem.StorageAccessFramework.createFileAsync(folderUri, file.name, 'video/mp4');
+            await FileSystem.writeAsStringAsync(newFileUri, base64Data, { encoding: FileSystem.EncodingType.Base64 });
+          } catch (safError) {
+            console.log('SAF kopyalama hatası (dahili yine de kaydedildi):', safError.message);
+          }
+          
           count++;
           setDlDoneFiles(prev => [...prev, { name: getCleanTitle(file.name), platform: targetPlatform, status: 'ok' }]);
         } catch (e) {
@@ -781,10 +905,16 @@ export default function App() {
       }
     }
 
+    // İndirme bitti: ekranı serbest bırak, tamamlandı bildirimi göster
+    try {
+      deactivateKeepAwake('download');
+    } catch (e) {}
+
     setDownloading(false);
     setDlProgress('');
     if (!dlCancelRef.current) {
       setDlCurrentFile(`Tamamlandı! ${count} indirildi, ${skipped} zaten vardı.`);
+      await showDownloadCompleteNotification(count, skipped);
     } else {
       setDlCurrentFile(`İptal edildi. ${count} indirildi.`);
     }
@@ -794,11 +924,12 @@ export default function App() {
   const deleteAllOffline = async () => {
     Alert.alert(
       'Tüm Offline Videoları Sil',
-      'İndirilen tüm videolar cihazdan silinecek. Emin misin?',
+      'İndirilen tüm videolar cihazdan ve seçili klasörden silinecek. Emin misin?',
       [
         { text: 'İptal', style: 'cancel' },
         { text: 'Evet, Sil', style: 'destructive', onPress: async () => {
             try {
+              // 1) Dahili uygulama deposundaki videoları sil
               const igDir = FileSystem.documentDirectory + 'reels/instagram/';
               const ttDir = FileSystem.documentDirectory + 'reels/tiktok/';
               const ytDir = FileSystem.documentDirectory + 'reels/youtube/';
@@ -806,10 +937,36 @@ export default function App() {
                 const info = await FileSystem.getInfoAsync(dir);
                 if (info.exists) await FileSystem.deleteAsync(dir, { idempotent: true });
               }
+
+              // 2) SAF klasöründeki (harici indirme klasörü) videoları da sil
+              let safDeleted = 0;
+              const folderUri = savedFolderUri || await AsyncStorage.getItem('downloadFolderUri');
+              if (folderUri) {
+                try {
+                  const safFiles = await FileSystem.StorageAccessFramework.readDirectoryAsync(folderUri);
+                  for (const fileUri of safFiles) {
+                    try {
+                      // Sadece mp4 dosyaları sil
+                      const decodedUri = decodeURIComponent(fileUri);
+                      if (decodedUri.toLowerCase().endsWith('.mp4')) {
+                        await FileSystem.deleteAsync(fileUri, { idempotent: true });
+                        safDeleted++;
+                      }
+                    } catch (e) {
+                      // Tek dosya silinemezse devam et
+                    }
+                  }
+                } catch (safErr) {
+                  console.log('SAF klasörü okunamadı:', safErr.message);
+                }
+              }
+
               setLocalVideos([]);
               setLastWatched({ instagram: 0, tiktok: 0, youtube: 0 });
-              Alert.alert('Başarılı', 'Tüm offline videolar temizlendi.');
-            } catch (err) {}
+              Alert.alert('Başarılı', `Tüm offline videolar temizlendi.${safDeleted > 0 ? `\n${safDeleted} dosya harici klasörden de silindi.` : ''}`);
+            } catch (err) {
+              Alert.alert('Hata', 'Silme sırasında bir hata oluştu: ' + err.message);
+            }
           }
         }
       ]
@@ -1001,6 +1158,21 @@ export default function App() {
                 )}
               </TouchableOpacity>
             )}
+
+            {/* Klasör Seçme / Değiştirme Butonu */}
+            <TouchableOpacity 
+              style={styles.folderSelectBtn} 
+              onPress={pickDownloadFolder}
+            >
+              <Text style={styles.folderSelectText}>
+                📁 {savedFolderUri ? 'İndirme Klasörünü Değiştir' : 'İndirme Klasörü Seç'}
+              </Text>
+              {savedFolderUri && (
+                <Text style={styles.folderPathText} numberOfLines={1}>
+                  {decodeURIComponent(savedFolderUri).split('/').pop() || 'Seçili'}
+                </Text>
+              )}
+            </TouchableOpacity>
 
             <TouchableOpacity style={styles.deleteOfflineBtn} onPress={deleteAllOffline}>
               <Text style={{ color: '#ef4444', fontWeight: 'bold', fontSize: 13 }}>İndirilenleri Temizle</Text>
@@ -1336,6 +1508,9 @@ const styles = StyleSheet.create({
 
   quickDownloadBtn: { backgroundColor: '#00f2ea', borderRadius: 16, padding: 16, alignItems: 'center', marginTop: 10 },
   quickDownloadText: { color: '#000', fontWeight: '900', fontSize: 14 },
+  folderSelectBtn: { backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 14, padding: 14, alignItems: 'center', marginTop: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
+  folderSelectText: { color: '#fff', fontWeight: 'bold', fontSize: 13 },
+  folderPathText: { color: '#888', fontSize: 11, marginTop: 4 },
   deleteOfflineBtn: { alignItems: 'center', padding: 14, marginTop: 6 },
 
   // MİNİMAL REELS HUD (SIĞMA PROBLEMİ OLMAYAN)

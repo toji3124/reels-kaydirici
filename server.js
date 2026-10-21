@@ -232,7 +232,7 @@ function fetchProfileVideos(profileUrl, limit = 50) {
             cleanUrl
         ];
 
-        execFile(getYtDlpCmd(), args, { timeout: 90000, maxBuffer: 15 * 1024 * 1024 }, (error, stdout, stderr) => {
+        execFile(getYtDlpCmd(), args, { timeout: 300000, maxBuffer: 50 * 1024 * 1024 }, (error, stdout, stderr) => {
             if (error) {
                 reject(new Error(stderr || error.message || 'Profil taranamadı'));
                 return;
