@@ -915,11 +915,18 @@ app.get('/api/saved-links', (req, res) => {
     }
 });
 
-// Kaydedilen linkleri temizle
+// Kaydedilen linkleri temizle veya tekil link sil
 app.delete('/api/saved-links', (req, res) => {
     try {
+        const targetUrl = (req.body && req.body.url) || req.query.url;
+        if (targetUrl && fs.existsSync(linksFile)) {
+            let existing = JSON.parse(fs.readFileSync(linksFile, 'utf-8'));
+            existing = existing.filter(l => l.url !== targetUrl && (typeof l === 'string' ? l !== targetUrl : true));
+            fs.writeFileSync(linksFile, JSON.stringify(existing, null, 2));
+            return res.json({ success: true, remaining: existing.length });
+        }
         fs.writeFileSync(linksFile, '[]');
-        res.json({ success: true });
+        res.json({ success: true, remaining: 0 });
     } catch (err) {
         res.json({ success: false, error: err.message });
     }
