@@ -13,7 +13,11 @@ const CONFIG_FILE = path.join(__dirname, 'config.json');
 function loadConfig() {
     try {
         if (fs.existsSync(CONFIG_FILE)) {
-            return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8'));
+            const cfg = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8'));
+            if (process.platform !== 'win32' && cfg.downloadDir && /^[a-zA-Z]:[\\\/]/.test(cfg.downloadDir)) {
+                cfg.downloadDir = path.join(__dirname, 'downloads');
+            }
+            return cfg;
         }
     } catch(e) {}
     return {
@@ -33,6 +37,9 @@ const COOKIES_FILE = path.join(__dirname, 'cookies.txt');
 
 function updateDownloadDirs(newBaseDir) {
     if (!newBaseDir || typeof newBaseDir !== 'string') return;
+    if (process.platform !== 'win32' && /^[a-zA-Z]:[\\\/]/.test(newBaseDir)) {
+        newBaseDir = path.join(__dirname, 'downloads');
+    }
     DOWNLOADS_DIR = path.resolve(newBaseDir.trim());
     TIKTOK_DIR = path.join(DOWNLOADS_DIR, 'tiktok');
     INSTA_DIR = path.join(DOWNLOADS_DIR, 'instagram');
