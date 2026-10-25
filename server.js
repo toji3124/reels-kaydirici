@@ -901,17 +901,30 @@ app.post('/api/save-links', (req, res) => {
     }
 });
 
-// Kaydedilen linkleri getir
+// Kaydedilen linkleri getir (Hem data.links hem de Array.isArray(data) tam uyumlu)
 app.get('/api/saved-links', (req, res) => {
     try {
+        let links = [];
         if (fs.existsSync(linksFile)) {
-            const links = JSON.parse(fs.readFileSync(linksFile, 'utf-8'));
-            res.json({ links });
-        } else {
-            res.json({ links: [] });
+            links = JSON.parse(fs.readFileSync(linksFile, 'utf-8'));
+            if (!Array.isArray(links)) links = [];
         }
+        
+        // Eğer query ?format=array istenirse direkt [] döner
+        if (req.query.format === 'array') {
+            return res.json(links);
+        }
+        
+        // Varsayılan: Hem Array.isArray hem data.links uyumu için links'i dizi olarak JSON formatına uyduruyoruz
+        // JSON formatında bir dizi nesnesine .links = [...] ekleyemeyiz ama Express'te hem { links } hem de doğrudan array bekleyen yerler için:
+        // public/app.js data.links bekliyor.
+        // mobile/App.js her ikisini de destekliyor.
+        // Next.js frontend'i Array.isArray(data) ? data : data.links destekliyor.
+        // Bu yüzden { links, success: true } dönmek ve dizi isteyenler için format parametresi sunmak en güvenlisidir.
+        // Ayrıca dizi olarak serialize ederken ek alan taşınamadığından { links } standardına dönüp frontend'lerin hepsini çift uyumlu yapıyoruz.
+        res.json({ links, length: links.length });
     } catch (err) {
-        res.json({ links: [] });
+        res.json({ links: [], length: 0 });
     }
 });
 
@@ -1000,6 +1013,40 @@ function startHarvester(platform, count, autoDownload, res) {
     const py = spawn('python', [scriptName, '--count', targetCount.toString(), '--cookie', COOKIES_FILE]);
     harvestState.process = py;
 
+    const saveDiscoveredLinks = (urlsToSave) => {
+        if (!urlsToSave || urlsToSave.length === 0) return;
+        try {
+            let existing = [];
+            if (fs.existsSync(linksFile)) {
+                existing = JSON.parse(fs.readFileSync(linksFile, 'utf-8'));
+                if (!Array.isArray(existing)) existing = [];
+            }
+            const existingUrls = new Set(existing.map(l => l.url));
+            const newItems = urlsToSave
+                .filter(url => !existingUrls.has(url))
+                .map(url => ({
+                    url,
+                    title: itemTitle,
+                    platform: platformName,
+                    savedAt: new Date().toISOString()
+                }));
+            if (newItems.length > 0) {
+                const combined = [...existing, ...newItems];
+                fs.writeFileSync(linksFile, JSON.stringify(combined, null, 2));
+                console.log(`[Harvester] ${newItems.length} yeni ${platformName} linki anında havuza eklendi.`);
+
+                if (autoDownload) {
+                    for (const item of newItems) {
+                        downloadQueue.push({ url: item.url, filename: null });
+                    }
+                    processQueue();
+                }
+            }
+        } catch(err) {
+            console.error('[Harvester] Anlık kaydetme hatası:', err);
+        }
+    };
+
     let buffer = '';
     py.stdout.on('data', (chunk) => {
         buffer += chunk.toString();
@@ -1013,9 +1060,21 @@ function startHarvester(platform, count, autoDownload, res) {
                     const data = JSON.parse(trimmed.replace('PROGRESS:', ''));
                     harvestState.found = data.found;
                     harvestState.target = data.target;
-                    if (data.latest) harvestState.latest = data.latest;
+                    if (data.latest) {
+                        harvestState.latest = data.latest;
+                        if (!harvestState.links.includes(data.latest)) {
+                            harvestState.links.push(data.latest);
+                        }
+                    }
                     if (Array.isArray(data.recent)) {
                         harvestState.recentLinks = data.recent;
+                        for (const u of data.recent) {
+                            if (!harvestState.links.includes(u)) {
+                                harvestState.links.push(u);
+                            }
+                        }
+                        // Anında kaydedilen linkler dosyasına yaz!
+                        saveDiscoveredLinks(data.recent);
                     }
                 } catch(e) {}
             } else if (trimmed.startsWith('DONE:')) {
@@ -1026,6 +1085,7 @@ function startHarvester(platform, count, autoDownload, res) {
                     if (harvestState.links.length > 0) {
                         harvestState.recentLinks = harvestState.links.slice(-5);
                         harvestState.latest = harvestState.links[harvestState.links.length - 1];
+                        saveDiscoveredLinks(harvestState.links);
                     }
                 } catch(e) {}
             }
@@ -1043,33 +1103,7 @@ function startHarvester(platform, count, autoDownload, res) {
             harvestState.error = 'Tarama sonlandı veya iptal edildi (Kod: ' + code + ')';
         } else {
             if (harvestState.links.length > 0) {
-                try {
-                    let existing = [];
-                    if (fs.existsSync(linksFile)) {
-                        existing = JSON.parse(fs.readFileSync(linksFile, 'utf-8'));
-                    }
-                    const existingUrls = new Set(existing.map(l => l.url));
-                    const newItems = harvestState.links
-                        .filter(url => !existingUrls.has(url))
-                        .map(url => ({
-                            url,
-                            title: itemTitle,
-                            platform: platformName,
-                            savedAt: new Date().toISOString()
-                        }));
-                    const combined = [...existing, ...newItems];
-                    fs.writeFileSync(linksFile, JSON.stringify(combined, null, 2));
-                    console.log(`[Harvester] ${newItems.length} yeni ${platformName} linki toplananlara kaydedildi.`);
-
-                    if (autoDownload) {
-                        for (const item of newItems) {
-                            downloadQueue.push({ url: item.url, filename: null });
-                        }
-                        processQueue();
-                    }
-                } catch(err) {
-                    console.error('[Harvester] Kaydetme hatası:', err);
-                }
+                saveDiscoveredLinks(harvestState.links);
             }
         }
     });
@@ -1111,7 +1145,7 @@ app.post('/api/harvest-stop', (req, res) => {
         } catch(e) {}
         harvestState.isRunning = false;
         harvestState.process = null;
-        return res.json({ success: true, message: 'Tarama durduruldu.' });
+        return res.json({ success: true, message: 'Tarama durduruldu.', savedCount: harvestState.links.length });
     }
     res.json({ success: false, message: 'Çalışan tarama yok.' });
 });
@@ -1130,6 +1164,9 @@ app.get('/api/harvest/status', (req, res) => {
         found: harvestState.found,
         target: harvestState.target,
         links: harvestState.links,
+        recentLinks: harvestState.recentLinks || [],
+        latest: harvestState.latest || null,
+        startTime: harvestState.startTime || null,
         error: harvestState.error
     });
 });
@@ -1141,7 +1178,7 @@ app.post('/api/harvest/stop', (req, res) => {
         } catch(e) {}
         harvestState.isRunning = false;
         harvestState.process = null;
-        return res.json({ success: true, message: 'Tarama durduruldu.' });
+        return res.json({ success: true, message: 'Tarama durduruldu.', savedCount: harvestState.links.length });
     }
     res.json({ success: false, message: 'Çalışan tarama yok.' });
 });

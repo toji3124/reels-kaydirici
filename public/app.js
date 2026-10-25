@@ -605,7 +605,7 @@ async function fetchCollectedLinks() {
     try {
         const res = await fetch('/api/saved-links');
         const data = await res.json();
-        const links = data.links || [];
+        const links = Array.isArray(data) ? data : (data && Array.isArray(data.links) ? data.links : []);
 
         // Update badge
         if (links.length > 0) {

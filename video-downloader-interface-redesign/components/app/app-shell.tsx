@@ -80,9 +80,10 @@ export function AppShell() {
     fetch('/api/saved-links')
       .then((res) => res.json())
       .then((data) => {
-        if (Array.isArray(data)) {
+        const list = Array.isArray(data) ? data : (data && Array.isArray(data.links) ? data.links : [])
+        if (list.length >= 0) {
           setPool(
-            data.map((d: any, i: number) => ({
+            list.map((d: any, i: number) => ({
               id: d.id || `pool_${i}_${Date.now()}`,
               url: d.url,
               platform: (d.platform || 'tiktok') as any,

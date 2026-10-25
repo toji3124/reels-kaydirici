@@ -31,8 +31,9 @@ export function LinkPoolView({
     try {
       const res = await fetch('/api/saved-links')
       const data = await res.json()
-      if (Array.isArray(data)) {
-        const mapped: PoolLink[] = data.map((d: any, i: number) => ({
+      const list = Array.isArray(data) ? data : (data && Array.isArray(data.links) ? data.links : [])
+      if (list.length >= 0) {
+        const mapped: PoolLink[] = list.map((d: any, i: number) => ({
           id: d.id || `pool_${i}_${Date.now()}`,
           url: d.url,
           platform: detectPlatform(d.url) || 'tiktok',
