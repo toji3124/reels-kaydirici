@@ -1,0 +1,12 @@
+.git
+node_modules
+video-downloader-interface-redesign
+mobile
+downloads/*.mp4
+downloads/*/*.mp4
+yt-dlp.exe
+ffmpeg.exe
+*.log
+BASLAT.bat
+reels-baslat-arkaplan.vbs
+reels-durdur.bat

@@ -1,0 +1,862 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#0a0a0f">
+    <title>Video & Reels Player</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        :root {
+            --bg: #0a0a0f;
+            --card: rgba(255,255,255,0.06);
+            --border: rgba(255,255,255,0.08);
+            --text: #ffffff;
+            --text-dim: rgba(255,255,255,0.6);
+            --accent-ig: #E1306C;
+            --accent-tt: #00f2ea;
+            --accent-yt: #ef4444;
+            --accent-purple: #8b5cf6;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: var(--bg);
+            font-family: 'Inter', sans-serif;
+            color: var(--text);
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        /* ===== TOP NAV ===== */
+        .top-nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 12px 16px;
+            padding-top: max(12px, env(safe-area-inset-top));
+            background: linear-gradient(to bottom, rgba(0,0,0,0.85) 0%, transparent 100%);
+            pointer-events: none;
+        }
+
+        .top-nav > * {
+            pointer-events: auto;
+        }
+
+        .nav-tabs {
+            display: flex;
+            gap: 4px;
+            background: rgba(20,24,38,0.7);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--border);
+            border-radius: 25px;
+            padding: 4px;
+        }
+
+        .nav-tab {
+            padding: 7px 16px;
+            border: none;
+            border-radius: 20px;
+            background: none;
+            color: var(--text-dim);
+            font-family: 'Inter', sans-serif;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .nav-tab.active {
+            color: white;
+        }
+
+        .nav-tab .tab-count {
+            background: rgba(255,255,255,0.15);
+            padding: 1px 7px;
+            border-radius: 10px;
+            font-size: 11px;
+        }
+
+        .nav-tab.active.ig { background: var(--accent-ig); }
+        .nav-tab.active.tt { background: var(--accent-tt); color: #000; }
+        .nav-tab.active.yt { background: var(--accent-yt); color: #fff; }
+
+        .back-btn {
+            position: absolute;
+            left: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            border: 1px solid var(--border);
+            background: rgba(20,24,38,0.8);
+            backdrop-filter: blur(10px);
+            color: white;
+            font-size: 18px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-decoration: none;
+            transition: transform 0.2s;
+        }
+        .back-btn:active { transform: translateY(-50%) scale(0.9); }
+
+        /* ===== VIDEO FEED ===== */
+        .feed-container {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .video-slide {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #000;
+            transition: transform 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+        }
+
+        .video-wrapper {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #000;
+        }
+
+        .video-slide video {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            background: #000;
+        }
+
+        .video-slide.fill video {
+            object-fit: cover;
+        }
+
+        /* Big Play/Pause indicator on screen tap */
+        .center-indicator {
+            position: absolute;
+            width: 76px;
+            height: 76px;
+            border-radius: 50%;
+            background: rgba(0,0,0,0.65);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255,255,255,0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 30px;
+            color: #fff;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.25s, transform 0.25s;
+            transform: scale(0.8);
+            z-index: 45;
+        }
+        .center-indicator.show {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        /* ===== SIDE ACTIONS ===== */
+        .side-actions {
+            position: absolute;
+            right: 14px;
+            bottom: 185px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            z-index: 60;
+        }
+
+        .side-btn {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            cursor: pointer;
+            transition: transform 0.15s;
+        }
+        .side-btn:active { transform: scale(0.9); }
+
+        .side-btn .icon-circle {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: rgba(20,24,38,0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255,255,255,0.12);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+        }
+
+        .side-btn svg {
+            width: 22px;
+            height: 22px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .side-btn .label {
+            font-size: 11px;
+            color: rgba(255,255,255,0.85);
+            font-weight: 600;
+        }
+
+        /* ===== BOTTOM INFO & CONTROLS ===== */
+        .bottom-overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 16px;
+            padding-bottom: max(16px, env(safe-area-inset-bottom));
+            background: linear-gradient(to top, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.6) 70%, transparent 100%);
+            z-index: 40;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .video-meta {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            max-width: calc(100% - 70px);
+        }
+
+        .platform-badge {
+            display: inline-block;
+            align-self: flex-start;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+        .badge-ig { background: var(--accent-ig); color: #fff; }
+        .badge-tt { background: var(--accent-tt); color: #000; }
+        .badge-yt { background: var(--accent-yt); color: #fff; }
+
+        .video-name {
+            font-size: 14px;
+            font-weight: 600;
+            color: #fff;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .video-sub {
+            font-size: 12px;
+            color: var(--text-dim);
+        }
+
+        /* ===== TIMELINE / SEEK BAR ===== */
+        .timeline-container {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            padding-top: 4px;
+        }
+
+        .timeline-bar {
+            position: relative;
+            width: 100%;
+            height: 8px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 4px;
+            cursor: pointer;
+            overflow: hidden;
+            touch-action: none;
+        }
+        .timeline-bar:hover {
+            height: 10px;
+        }
+
+        .timeline-progress {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #ef4444, #ff5e62);
+            border-radius: 4px;
+            pointer-events: none;
+            transition: width 0.1s linear;
+        }
+
+        .timeline-times {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            font-weight: 600;
+            color: rgba(255,255,255,0.7);
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* ===== PLAYER CONTROL BAR ===== */
+        .controls-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            padding-top: 4px;
+        }
+
+        .ctrl-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .ctrl-btn {
+            background: rgba(255,255,255,0.12);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: white;
+            border-radius: 8px;
+            padding: 6px 12px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            transition: all 0.2s;
+        }
+        .ctrl-btn:hover {
+            background: rgba(255,255,255,0.22);
+        }
+        .ctrl-btn:active {
+            transform: scale(0.95);
+        }
+
+        /* ===== EMPTY STATE ===== */
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            text-align: center;
+            padding: 20px;
+            color: var(--text-dim);
+        }
+        .empty-icon { font-size: 48px; margin-bottom: 12px; }
+        .empty-state h3 { color: #fff; margin-bottom: 6px; font-size: 18px; }
+        .empty-state p { font-size: 13px; max-width: 320px; }
+
+        /* ===== LOADING ===== */
+        .loading-overlay {
+            position: fixed;
+            inset: 0;
+            background: var(--bg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 200;
+            transition: opacity 0.3s;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(255,255,255,0.1);
+            border-top-color: var(--accent-purple);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ===== TOAST ===== */
+        .player-toast {
+            position: fixed;
+            top: 75px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border);
+            padding: 8px 18px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            z-index: 200;
+            color: white;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Loading -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="spinner"></div>
+    </div>
+
+    <!-- Top Nav -->
+    <nav class="top-nav">
+        <a href="/" class="back-btn" title="Ana Sayfaya Dön">←</a>
+        <div class="nav-tabs">
+            <button class="nav-tab ig active" data-platform="instagram" id="tabIg">
+                📸 Reels <span class="tab-count" id="countIg">0</span>
+            </button>
+            <button class="nav-tab tt" data-platform="tiktok" id="tabTt">
+                🎵 TikTok <span class="tab-count" id="countTt">0</span>
+            </button>
+            <button class="nav-tab yt" data-platform="youtube" id="tabYt">
+                ▶ YouTube <span class="tab-count" id="countYt">0</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Feed Container -->
+    <div class="feed-container" id="feedContainer"></div>
+
+    <!-- Toast Notification -->
+    <div class="player-toast" id="playerToast"></div>
+
+    <script>
+        // State
+        let videos = { instagram: [], tiktok: [], youtube: [] };
+        let currentPlatform = 'instagram';
+        let currentIndex = 0;
+        let startY = 0;
+        let currentY = 0;
+        let isDragging = false;
+        let lastTapTime = 0;
+
+        // DOM
+        const feedContainer = document.getElementById('feedContainer');
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        const playerToast = document.getElementById('playerToast');
+
+        function showToast(msg) {
+            playerToast.textContent = msg;
+            playerToast.style.display = 'block';
+            clearTimeout(window._tTimeout);
+            window._tTimeout = setTimeout(() => {
+                playerToast.style.display = 'none';
+            }, 1500);
+        }
+
+        function formatTime(seconds) {
+            if (isNaN(seconds) || seconds < 0) return '00:00';
+            const m = Math.floor(seconds / 60);
+            const s = Math.floor(seconds % 60);
+            return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+        }
+
+        function getCleanTitle(name) {
+            if (!name) return '';
+            return name
+                .replace(/^([a-zA-Z0-9]+)_[^_]+_\d+_/, '')
+                .replace(/^([a-zA-Z0-9]+)_\d+_/, '')
+                .replace(/\.mp4$/i, '')
+                .trim() || name.replace(/\.mp4$/i, '');
+        }
+
+        // Fetch videos
+        async function fetchVideos() {
+            try {
+                const res = await fetch('/api/files');
+                const data = await res.json();
+                const files = data.files || [];
+
+                videos.youtube = files.filter(f => f.platform === 'youtube' || f.name.includes('youtube'));
+                videos.tiktok = files.filter(f => f.platform === 'tiktok' || f.name.includes('tiktok'));
+                videos.instagram = files.filter(f => f.platform === 'instagram' || (!videos.youtube.includes(f) && !videos.tiktok.includes(f)));
+
+                document.getElementById('countIg').textContent = videos.instagram.length;
+                document.getElementById('countTt').textContent = videos.tiktok.length;
+                document.getElementById('countYt').textContent = videos.youtube.length;
+
+                // Eğer varsayılan sekmede video yoksa ve youtube'da varsa, doğrudan youtube'a geç
+                if (videos.instagram.length === 0 && videos.youtube.length > 0) {
+                    setPlatform('youtube');
+                } else {
+                    renderFeed();
+                }
+            } catch (err) {
+                console.error('Video fetch error:', err);
+            } finally {
+                loadingOverlay.style.opacity = '0';
+                setTimeout(() => loadingOverlay.style.display = 'none', 300);
+            }
+        }
+
+        function setPlatform(platform) {
+            currentPlatform = platform;
+            document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+            if (platform === 'instagram') document.getElementById('tabIg').classList.add('active');
+            if (platform === 'tiktok') document.getElementById('tabTt').classList.add('active');
+            if (platform === 'youtube') document.getElementById('tabYt').classList.add('active');
+            renderFeed();
+        }
+
+        // Render feed
+        function renderFeed() {
+            const list = videos[currentPlatform];
+            feedContainer.innerHTML = '';
+            currentIndex = 0;
+
+            if (list.length === 0) {
+                const icon = currentPlatform === 'youtube' ? '▶' : (currentPlatform === 'tiktok' ? '🎵' : '📸');
+                const name = currentPlatform === 'youtube' ? 'YouTube' : (currentPlatform === 'tiktok' ? 'TikTok' : 'Instagram Reels');
+                feedContainer.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">${icon}</div>
+                        <h3>Henüz ${name} videosu yok</h3>
+                        <p>Ana sayfadan video indirdiğinde burada tam ekran oynatıcıda izleyebilirsin</p>
+                    </div>
+                `;
+                return;
+            }
+
+            // Create slides
+            list.forEach((file, i) => {
+                const slide = document.createElement('div');
+                slide.className = 'video-slide';
+                slide.style.transform = `translateY(${i * 100}%)`;
+                slide.dataset.index = i;
+
+                const isYt = currentPlatform === 'youtube';
+                const isTt = currentPlatform === 'tiktok';
+                const isIg = currentPlatform === 'instagram';
+                const pClass = isYt ? 'badge-yt' : (isTt ? 'badge-tt' : 'badge-ig');
+                const pText = isYt ? 'YouTube' : (isTt ? 'TikTok' : 'Instagram');
+                const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+
+                slide.innerHTML = `
+                    <div class="video-wrapper">
+                        <video src="${file.path}" playsinline webkit-playsinline preload="metadata" ${i === 0 ? 'autoplay' : ''}></video>
+                        <div class="center-indicator" id="indicator${i}">▶</div>
+                    </div>
+                    
+                    <div class="side-actions">
+                        <div class="side-btn" onclick="downloadSingle(${i})">
+                            <div class="icon-circle">
+                                <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                            </div>
+                            <span class="label">Kaydet</span>
+                        </div>
+                        <div class="side-btn" onclick="toggleMute(${i})">
+                            <div class="icon-circle" id="muteIcon${i}">
+                                <svg viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+                            </div>
+                            <span class="label" id="muteLabel${i}">Ses Açık</span>
+                        </div>
+                        <div class="side-btn" onclick="toggleFit(${i})">
+                            <div class="icon-circle">
+                                <svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+                            </div>
+                            <span class="label">Boyut</span>
+                        </div>
+                    </div>
+
+                    <div class="bottom-overlay">
+                        <div class="video-meta">
+                            <span class="platform-badge ${pClass}">${pText}</span>
+                            <div class="video-name" title="${file.name}">${getCleanTitle(file.name)}</div>
+                            <div class="video-sub">${file.uploader || 'Genel'} • ${sizeMB} MB • ${i + 1} / ${list.length}</div>
+                        </div>
+
+                        <!-- Progress Scrubber Bar -->
+                        <div class="timeline-container">
+                            <div class="timeline-bar" id="timeline${i}" onclick="seekVideo(event, ${i})">
+                                <div class="timeline-progress" id="progress${i}"></div>
+                            </div>
+                            <div class="timeline-times">
+                                <span id="curTime${i}">00:00</span>
+                                <span id="durTime${i}">--:--</span>
+                            </div>
+                        </div>
+
+                        <!-- Controls Row -->
+                        <div class="controls-row">
+                            <div class="ctrl-group">
+                                <button class="ctrl-btn" onclick="togglePlayPause(${i})" id="playBtn${i}">
+                                    ⏸ Durdur
+                                </button>
+                                <button class="ctrl-btn" onclick="skipSeconds(${i}, -10)" title="10 saniye geri">
+                                    ⏪ 10s
+                                </button>
+                                <button class="ctrl-btn" onclick="skipSeconds(${i}, 10)" title="10 saniye ileri">
+                                    ⏩ 10s
+                                </button>
+                            </div>
+                            <div class="ctrl-group">
+                                <button class="ctrl-btn" onclick="cycleSpeed(${i})" id="speedBtn${i}">
+                                    ⚡ 1x
+                                </button>
+                                <button class="ctrl-btn" onclick="toggleFullscreen()" title="Tam Ekran">
+                                    ⛶
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                feedContainer.appendChild(slide);
+
+                const video = slide.querySelector('video');
+                const progress = slide.querySelector(`#progress${i}`);
+                const curTime = slide.querySelector(`#curTime${i}`);
+                const durTime = slide.querySelector(`#durTime${i}`);
+                const playBtn = slide.querySelector(`#playBtn${i}`);
+
+                video.addEventListener('timeupdate', () => {
+                    if (!video.duration) return;
+                    const pct = (video.currentTime / video.duration) * 100;
+                    progress.style.width = `${pct}%`;
+                    curTime.textContent = formatTime(video.currentTime);
+                });
+
+                video.addEventListener('loadedmetadata', () => {
+                    durTime.textContent = formatTime(video.duration);
+                });
+
+                video.addEventListener('play', () => {
+                    if (playBtn) playBtn.innerHTML = '⏸ Durdur';
+                });
+
+                video.addEventListener('pause', () => {
+                    if (playBtn) playBtn.innerHTML = '▶ Oynat';
+                });
+
+                video.addEventListener('ended', () => {
+                    // Video bittiğinde bir sonrakine otomatik geç (YouTube veya Reels)
+                    if (currentIndex < list.length - 1) {
+                        goToSlide(currentIndex + 1);
+                    }
+                });
+            });
+
+            setupTouch();
+            goToSlide(0);
+        }
+
+        function setupTouch() {
+            feedContainer.addEventListener('touchstart', onTouchStart, { passive: true });
+            feedContainer.addEventListener('touchmove', onTouchMove, { passive: true });
+            feedContainer.addEventListener('touchend', onTouchEnd, { passive: true });
+        }
+
+        function onTouchStart(e) {
+            startY = e.touches[0].clientY;
+            isDragging = true;
+        }
+
+        function onTouchMove(e) {
+            if (!isDragging) return;
+            currentY = e.touches[0].clientY;
+            const diff = currentY - startY;
+            
+            const slides = feedContainer.querySelectorAll('.video-slide');
+            slides.forEach((slide, i) => {
+                const offset = (i - currentIndex) * 100;
+                const dragPercent = (diff / window.innerHeight) * 100;
+                slide.style.transition = 'none';
+                slide.style.transform = `translateY(${offset + dragPercent}%)`;
+            });
+        }
+
+        function onTouchEnd() {
+            if (!isDragging) return;
+            isDragging = false;
+
+            const diff = currentY - startY;
+            const threshold = window.innerHeight * 0.12;
+            const list = videos[currentPlatform];
+
+            if (diff < -threshold && currentIndex < list.length - 1) {
+                currentIndex++;
+            } else if (diff > threshold && currentIndex > 0) {
+                currentIndex--;
+            }
+
+            goToSlide(currentIndex);
+        }
+
+        function goToSlide(index) {
+            currentIndex = index;
+            const slides = feedContainer.querySelectorAll('.video-slide');
+            
+            slides.forEach((slide, i) => {
+                slide.style.transition = 'transform 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
+                slide.style.transform = `translateY(${(i - index) * 100}%)`;
+
+                const video = slide.querySelector('video');
+                if (i === index) {
+                    video.play().catch(() => {});
+                } else {
+                    video.pause();
+                }
+            });
+        }
+
+        function togglePlayPause(index) {
+            const slide = feedContainer.querySelectorAll('.video-slide')[index];
+            const video = slide?.querySelector('video');
+            const indicator = slide?.querySelector('.center-indicator');
+            if (!video) return;
+
+            if (video.paused) {
+                video.play();
+                indicator.innerHTML = '▶';
+            } else {
+                video.pause();
+                indicator.innerHTML = '⏸';
+            }
+
+            indicator.classList.add('show');
+            setTimeout(() => indicator.classList.remove('show'), 400);
+        }
+
+        function skipSeconds(index, seconds) {
+            const slide = feedContainer.querySelectorAll('.video-slide')[index];
+            const video = slide?.querySelector('video');
+            if (!video) return;
+            video.currentTime = Math.max(0, Math.min(video.duration || 0, video.currentTime + seconds));
+            showToast(`${seconds > 0 ? '+' : ''}${seconds}s`);
+        }
+
+        function seekVideo(event, index) {
+            event.stopPropagation();
+            const slide = feedContainer.querySelectorAll('.video-slide')[index];
+            const video = slide?.querySelector('video');
+            const timeline = slide?.querySelector(`#timeline${index}`);
+            if (!video || !timeline) return;
+
+            const rect = timeline.getBoundingClientRect();
+            const clickX = event.clientX - rect.left;
+            const pct = Math.max(0, Math.min(1, clickX / rect.width));
+            if (video.duration) {
+                video.currentTime = pct * video.duration;
+            }
+        }
+
+        const speeds = [1, 1.25, 1.5, 2];
+        function cycleSpeed(index) {
+            const slide = feedContainer.querySelectorAll('.video-slide')[index];
+            const video = slide?.querySelector('video');
+            const speedBtn = slide?.querySelector(`#speedBtn${index}`);
+            if (!video) return;
+
+            const cur = video.playbackRate || 1;
+            const nextIdx = (speeds.indexOf(cur) + 1) % speeds.length;
+            const nextSpeed = speeds[nextIdx];
+            video.playbackRate = nextSpeed;
+            if (speedBtn) speedBtn.textContent = `⚡ ${nextSpeed}x`;
+            showToast(`Hız: ${nextSpeed}x`);
+        }
+
+        function toggleFit(index) {
+            const slide = feedContainer.querySelectorAll('.video-slide')[index];
+            slide?.classList.toggle('fill');
+            const isFill = slide?.classList.contains('fill');
+            showToast(isFill ? 'Ekrana Dolduruldu (Fill)' : 'Orijinal Oran (Fit)');
+        }
+
+        function toggleMute(index) {
+            const slide = feedContainer.querySelectorAll('.video-slide')[index];
+            const video = slide?.querySelector('video');
+            const label = slide?.querySelector(`#muteLabel${index}`);
+            if (!video) return;
+            video.muted = !video.muted;
+            label.textContent = video.muted ? 'Sessiz' : 'Ses Açık';
+            showToast(video.muted ? '🔇 Sessiz' : '🔊 Ses Açık');
+        }
+
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(() => {});
+            } else {
+                document.exitFullscreen().catch(() => {});
+            }
+        }
+
+        function downloadSingle(index) {
+            const list = videos[currentPlatform];
+            const file = list[index];
+            if (!file) return;
+            const a = document.createElement('a');
+            a.href = file.path;
+            a.download = file.name;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            showToast('İndirme başladı...');
+        }
+
+        // Tap video area to toggle play/pause
+        feedContainer.addEventListener('click', (e) => {
+            if (e.target.closest('.side-btn') || e.target.closest('.bottom-overlay') || e.target.closest('.top-nav')) return;
+            togglePlayPause(currentIndex);
+        });
+
+        // Keyboard Controls
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault();
+                togglePlayPause(currentIndex);
+            } else if (e.code === 'ArrowRight') {
+                e.preventDefault();
+                skipSeconds(currentIndex, 5);
+            } else if (e.code === 'ArrowLeft') {
+                e.preventDefault();
+                skipSeconds(currentIndex, -5);
+            } else if (e.code === 'ArrowDown') {
+                e.preventDefault();
+                const list = videos[currentPlatform];
+                if (currentIndex < list.length - 1) goToSlide(currentIndex + 1);
+            } else if (e.code === 'ArrowUp') {
+                e.preventDefault();
+                if (currentIndex > 0) goToSlide(currentIndex - 1);
+            } else if (e.key === 'm' || e.key === 'M') {
+                toggleMute(currentIndex);
+            } else if (e.key === 'f' || e.key === 'F') {
+                toggleFullscreen();
+            }
+        });
+
+        // Tabs
+        document.getElementById('tabIg').addEventListener('click', () => setPlatform('instagram'));
+        document.getElementById('tabTt').addEventListener('click', () => setPlatform('tiktok'));
+        document.getElementById('tabYt').addEventListener('click', () => setPlatform('youtube'));
+
+        // Init
+        fetchVideos();
+    </script>
+</body>
+</html>

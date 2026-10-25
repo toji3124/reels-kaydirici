@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <title>Video Pro - Eklenti</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            width: 350px;
+            background: #090a0f;
+            color: #f4f4f5;
+            padding: 14px;
+            user-select: none;
+            overflow-x: hidden;
+        }
+
+        /* HEADER */
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding-bottom: 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            margin-bottom: 12px;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            text-decoration: none;
+        }
+
+        .brand-icon {
+            width: 28px;
+            height: 28px;
+            background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4);
+        }
+
+        .brand-icon svg {
+            width: 15px;
+            height: 15px;
+            color: #ffffff;
+            stroke-width: 2.5;
+        }
+
+        .brand-text h1 {
+            font-size: 14px;
+            font-weight: 700;
+            color: #ffffff;
+            line-height: 1.1;
+            letter-spacing: -0.3px;
+        }
+
+        .brand-text span {
+            font-size: 10px;
+            color: #71717a;
+            font-weight: 500;
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .status-pill {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 10px;
+            font-weight: 600;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            color: #a1a1aa;
+        }
+
+        .dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #ef4444;
+            box-shadow: 0 0 6px #ef4444;
+        }
+
+        .dot.connected {
+            background: #10b981;
+            box-shadow: 0 0 6px #10b981;
+        }
+
+        .icon-btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            color: #a1a1aa;
+            border-radius: 8px;
+            width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.2s;
+        }
+
+        .icon-btn:hover {
+            color: #ffffff;
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        /* TABS */
+        .tabs {
+            display: flex;
+            gap: 4px;
+            background: #12131b;
+            padding: 3px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            margin-bottom: 12px;
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 7px 10px;
+            font-size: 11px;
+            font-weight: 600;
+            background: transparent;
+            border: none;
+            color: #71717a;
+            border-radius: 7px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+        }
+
+        .tab-btn:hover {
+            color: #f4f4f5;
+        }
+
+        .tab-btn.active {
+            background: #1c1d27;
+            color: #ffffff;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .tab-btn.active.primary-tab {
+            color: #f87171;
+        }
+
+        /* CARD PANELS */
+        .panel {
+            background: #12131b;
+            border: 1px solid rgba(255, 255, 255, 0.07);
+            border-radius: 12px;
+            padding: 12px;
+            margin-bottom: 10px;
+        }
+
+        .panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+
+        .panel-title {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #a1a1aa;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .panel-badge {
+            font-size: 10px;
+            font-weight: 600;
+            padding: 2px 7px;
+            border-radius: 6px;
+            background: rgba(239, 68, 68, 0.12);
+            color: #ef4444;
+            border: 1px solid rgba(239, 68, 68, 0.25);
+        }
+
+        /* INPUT GROUP */
+        .input-wrap {
+            position: relative;
+            margin-bottom: 8px;
+        }
+
+        .text-input {
+            width: 100%;
+            background: #090a0f;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 9px;
+            padding: 9px 34px 9px 10px;
+            color: #ffffff;
+            font-family: inherit;
+            font-size: 12px;
+            outline: none;
+            transition: all 0.2s;
+        }
+
+        .text-input:focus {
+            border-color: #ef4444;
+            box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2);
+        }
+
+        .text-input::placeholder {
+            color: #52525b;
+            font-size: 11px;
+        }
+
+        .clear-btn {
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: transparent;
+            border: none;
+            color: #71717a;
+            cursor: pointer;
+            padding: 2px;
+            display: none;
+        }
+
+        .clear-btn:hover {
+            color: #ffffff;
+        }
+
+        .quick-actions {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 10px;
+        }
+
+        .mini-btn {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.07);
+            color: #d4d4d8;
+            border-radius: 7px;
+            padding: 5px 8px;
+            font-size: 10.5px;
+            font-weight: 500;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            transition: all 0.2s;
+        }
+
+        .mini-btn:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.15);
+            color: #ffffff;
+        }
+
+        /* PRIMARY DOWNLOAD BUTTON */
+        .btn-primary {
+            width: 100%;
+            background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
+            border: none;
+            border-radius: 10px;
+            color: #ffffff;
+            padding: 10px 14px;
+            font-size: 12.5px;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            box-shadow: 0 4px 14px rgba(239, 68, 68, 0.35);
+            transition: all 0.2s;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            filter: brightness(1.1);
+            transform: translateY(-1px);
+            box-shadow: 0 6px 18px rgba(239, 68, 68, 0.45);
+        }
+
+        .btn-primary:active:not(:disabled) {
+            transform: translateY(1px);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-primary svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        .info-hint {
+            display: flex;
+            align-items: flex-start;
+            gap: 6px;
+            margin-top: 8px;
+            font-size: 10px;
+            color: #71717a;
+            line-height: 1.4;
+        }
+
+        .info-hint svg {
+            width: 12px;
+            height: 12px;
+            color: #10b981;
+            flex-shrink: 0;
+            margin-top: 1px;
+        }
+
+        /* STATUS NOTIFICATION */
+        .status-msg {
+            margin-top: 8px;
+            padding: 8px 10px;
+            border-radius: 8px;
+            font-size: 11px;
+            font-weight: 500;
+            display: none;
+            text-align: center;
+            animation: fadeIn 0.2s ease-in-out;
+        }
+
+        .status-msg.loading {
+            display: block;
+            background: rgba(245, 158, 11, 0.1);
+            border: 1px solid rgba(245, 158, 11, 0.25);
+            color: #fbbf24;
+        }
+
+        .status-msg.success {
+            display: block;
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.25);
+            color: #34d399;
+        }
+
+        .status-msg.error {
+            display: block;
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.25);
+            color: #f87171;
+        }
+
+        /* AUTO SCROLL TAB CONTENT */
+        .stat-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .stat-box {
+            background: #090a0f;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 9px;
+            padding: 8px 10px;
+        }
+
+        .stat-label {
+            font-size: 9.5px;
+            color: #71717a;
+            font-weight: 500;
+            text-transform: uppercase;
+        }
+
+        .stat-value {
+            font-size: 16px;
+            font-weight: 800;
+            color: #ffffff;
+            margin-top: 2px;
+            font-family: monospace;
+        }
+
+        .stat-value.green {
+            color: #10b981;
+        }
+
+        .options-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .option-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 11px;
+            color: #d4d4d8;
+            cursor: pointer;
+        }
+
+        .option-row input[type="checkbox"] {
+            accent-color: #ef4444;
+            width: 14px;
+            height: 14px;
+            cursor: pointer;
+        }
+
+        .number-input {
+            width: 50px;
+            background: #090a0f;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: #ffffff;
+            border-radius: 6px;
+            padding: 3px 6px;
+            font-size: 11px;
+            font-family: monospace;
+            text-align: center;
+            outline: none;
+        }
+
+        .btn-secondary {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 9px;
+            color: #ffffff;
+            padding: 8px 12px;
+            font-size: 11.5px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            transition: all 0.2s;
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.09);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        /* FOOTER */
+        .footer {
+            margin-top: 10px;
+            padding-top: 8px;
+            border-top: 1px solid rgba(255, 255, 255, 0.06);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 10px;
+            color: #52525b;
+        }
+
+        .footer a {
+            color: #71717a;
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        .footer a:hover {
+            color: #ef4444;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-4px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ÜST BAŞLIK -->
+    <div class="header">
+        <a href="http://localhost:3000" target="_blank" class="brand" title="Video Pro Web Arayüzünü Aç">
+            <div class="brand-icon">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                </svg>
+            </div>
+            <div class="brand-text">
+                <h1>Video Pro</h1>
+                <span>İndirme Yöneticisi</span>
+            </div>
+        </a>
+        <div class="header-actions">
+            <div class="status-pill">
+                <span id="serverDot" class="dot"></span>
+                <span id="serverText">Bağlanıyor...</span>
+            </div>
+            <a href="http://localhost:3000" target="_blank" class="icon-btn" title="Web Sitesini Aç">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                    <polyline points="15 3 21 3 21 9"></polyline>
+                    <line x1="10" y1="14" x2="21" y2="3"></line>
+                </svg>
+            </a>
+        </div>
+    </div>
+
+    <!-- SEKMELER -->
+    <div class="tabs">
+        <button id="tabDirect" type="button" class="tab-btn active primary-tab">
+            ⚡ Doğrudan İndir
+        </button>
+        <button id="tabCrawler" type="button" class="tab-btn">
+            🚀 Akış Toplayıcı
+        </button>
+        <button id="tabTools" type="button" class="tab-btn">
+            🍪 Araçlar
+        </button>
+    </div>
+
+    <!-- SEKME 1: DOĞRUDAN İNDİR (LİNK GİRMELİ) -->
+    <div id="sectionDirect">
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                    </svg>
+                    Video Linki
+                </span>
+                <span id="detectedPlatformBadge" class="panel-badge" style="display: none;">IG Reels</span>
+            </div>
+
+            <div class="input-wrap">
+                <input 
+                    type="text" 
+                    id="linkInput" 
+                    class="text-input" 
+                    placeholder="Instagram, TikTok, YouTube veya X linki..." 
+                    autocomplete="off"
+                    spellcheck="false"
+                />
+                <button type="button" id="clearInputBtn" class="clear-btn" title="Temizle">✕</button>
+            </div>
+
+            <div class="quick-actions">
+                <button type="button" id="pasteBtn" class="mini-btn">
+                    📋 Panodan Yapıştır
+                </button>
+                <button type="button" id="getActiveTabBtn" class="mini-btn">
+                    🌐 Açık Sekmeyi Al
+                </button>
+            </div>
+
+            <button type="button" id="downloadDirectBtn" class="btn-primary">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+                Doğrudan İndir (Konum Seç)
+            </button>
+
+            <div class="info-hint">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+                <span>Tıkladığınızda Windows <strong>Farklı Kaydet</strong> penceresi açılır ve videoyu nereye kaydedeceğinizi seçersiniz.</span>
+            </div>
+
+            <div id="directStatusMsg" class="status-msg"></div>
+        </div>
+    </div>
+
+    <!-- SEKME 2: OTOMATİK AKIŞ TOPLAYICI -->
+    <div id="sectionCrawler" style="display: none;">
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                    </svg>
+                    Akış Durumu
+                </span>
+                <span id="activePageBadge" class="panel-badge" style="background: rgba(255,255,255,0.06); color: #d4d4d8; border-color: rgba(255,255,255,0.1);">
+                    Sayfa Bekleniyor
+                </span>
+            </div>
+
+            <div class="stat-grid">
+                <div class="stat-box">
+                    <div class="stat-label">Bekleyen Link</div>
+                    <div id="statPendingCount" class="stat-value">0</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Uygulamaya Giden</div>
+                    <div id="statServerCount" class="stat-value green">0</div>
+                </div>
+            </div>
+
+            <div class="options-list">
+                <label class="option-row">
+                    <span>Link Yakalama Aktif</span>
+                    <input type="checkbox" id="captureToggle" checked>
+                </label>
+                <label class="option-row">
+                    <span>Hızlı Kaydırma Modu</span>
+                    <input type="checkbox" id="fastModeToggle">
+                </label>
+                <div class="option-row">
+                    <span>Kaydırma Sayısı (0 = Sınırsız):</span>
+                    <input type="number" id="scrollCount" class="number-input" value="0" min="0">
+                </div>
+            </div>
+
+            <button type="button" id="autoScrollBtn" class="btn-primary" style="background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); box-shadow: 0 4px 14px rgba(59, 130, 246, 0.35);">
+                🚀 Otomatik Kaydırmayı Başlat
+            </button>
+        </div>
+    </div>
+
+    <!-- SEKME 3: ARAÇLAR & COOKIE -->
+    <div id="sectionTools" style="display: none;">
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path>
+                        <path d="M2 12h20"></path>
+                    </svg>
+                    Oturum & Çerezler
+                </span>
+            </div>
+            <p style="font-size: 11px; color: #a1a1aa; line-height: 1.4; margin-bottom: 10px;">
+                Instagram, TikTok ve Twitter oturum çerezlerinizi tek tıkla yerel sunucuya aktarır. Böylece gizli içerikleri ve profilleri sorunsuz indirebilirsiniz.
+            </p>
+            <button type="button" id="syncCookiesBtn" class="btn-secondary" style="border-color: rgba(245, 158, 11, 0.3); color: #fbbf24;">
+                🍪 Cookieleri Sunucuya Aktar (IG, TT, X)
+            </button>
+            <div id="cookieStatusMsg" class="status-msg"></div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">Klasör & Web Arayüzü</span>
+            </div>
+            <a href="http://localhost:3000" target="_blank" class="btn-secondary" style="text-decoration: none; margin-bottom: 6px;">
+                🌐 Video Pro Web Arayüzünü Aç
+            </a>
+        </div>
+    </div>
+
+    <!-- ALT BİLGİ -->
+    <div class="footer">
+        <span>Video Pro v2.0</span>
+        <a href="http://localhost:3000" target="_blank">localhost:3000</a>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+</html>
