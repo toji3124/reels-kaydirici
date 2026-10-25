@@ -11,9 +11,16 @@
     },
     "android": {
       "package": "com.reelsindirici.app",
-      "usesCleartextTraffic": true,
+      "permissions": [
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "MANAGE_EXTERNAL_STORAGE",
+        "READ_MEDIA_VIDEO",
+        "READ_MEDIA_IMAGES",
+        "READ_MEDIA_AUDIO"
+      ],
       "adaptiveIcon": {
-        "backgroundColor": "#000000",
+        "backgroundColor": "#09090b",
         "foregroundImage": "./assets/android-icon-foreground.png"
       }
     },
@@ -34,9 +41,10 @@
         "expo-notifications",
         {
           "icon": "./assets/icon.png",
-          "color": "#00f2ea"
+          "color": "#e11d48"
         }
-      ]
+      ],
+      "expo-status-bar"
     ],
     "extra": {
       "eas": {

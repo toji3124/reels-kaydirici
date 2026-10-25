@@ -73,7 +73,26 @@ const SafeStorage = {
 };
 const AsyncStorage = SafeStorage;
 
-LogBox.ignoreLogs(['Cannot connect to Expo CLI']);
+LogBox.ignoreLogs([
+  'Cannot connect to Expo CLI',
+  '[expo-notifications] Push notifications',
+  'Push notifications (remote notifications) are unavailable in Expo Go',
+  'Push notifications are unavailable in Expo Go',
+]);
+
+// Expo Go SDK 53+ Android uzaktan bildirim uyarısını konsoldan gizle
+if (typeof console !== 'undefined' && console.warn) {
+  const _warn = console.warn;
+  console.warn = (...args) => {
+    if (
+      typeof args[0] === 'string' &&
+      (args[0].includes('expo-notifications') || args[0].includes('Push notifications'))
+    ) {
+      return;
+    }
+    _warn(...args);
+  };
+}
 
 const { width, height } = Dimensions.get('window');
 
@@ -101,8 +120,8 @@ function VideoSlide(props) {
 
   if (!isAdjacent) {
     return (
-      <View style={[styles.videoContainer, { backgroundColor: '#090a0f', justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator color="#00f2ea" />
+      <View style={[styles.videoContainer, { backgroundColor: '#09090b', justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator color="#e11d48" size="large" />
       </View>
     );
   }
@@ -110,19 +129,38 @@ function VideoSlide(props) {
   return <ActiveVideoSlide {...props} />;
 }
 
-function ActiveVideoSlide({ item, index, activeIndex, serverIp, onDelete, uiVisible, setUiVisible, isSwiping }) {
+function ActiveVideoSlide({
+  item,
+  index,
+  activeIndex,
+  serverIp,
+  onDelete,
+  onDownloadSingle,
+  uiVisible,
+  setUiVisible,
+  isSwiping,
+  isFavorite,
+  onToggleFavorite,
+  fitMode = 'contain',
+  onToggleFit,
+}) {
   const isActive = index === activeIndex;
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
   const [isSpeedUp, setIsSpeedUp] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
-  const isLongPressPauseRef = useRef(false);
-  
+  const [showCenterIcon, setShowCenterIcon] = useState(null); // 'play' | 'pause'
+  const centerIconTimer = useRef(null);
+  const userPausedRef = useRef(false);
+  const isHoldingFreezeRef = useRef(false);
+  const isSpeedingUpRef = useRef(false);
+  const wasPlayingBeforeFreezeRef = useRef(true);
   const touchX = useRef(0);
-  const longPressTimer = useRef(null);
+
   const videoViewRef = useRef(null);
-  
+
   const cleanIp = serverIp.trim();
   let serverVideoUri = '';
   if (cleanIp.startsWith('http')) {
@@ -131,43 +169,124 @@ function ActiveVideoSlide({ item, index, activeIndex, serverIp, onDelete, uiVisi
     serverVideoUri = `http://${cleanIp}:3000${item.path}`;
   }
   const videoUri = item.isLocal ? item.uri : serverVideoUri;
-  
-  const player = useVideoPlayer(videoUri, p => {
+
+  const player = useVideoPlayer(videoUri, (p) => {
     p.loop = true;
     p.muted = false;
   });
 
+  // Native oynatıcı durumunu dinle (Tek gerçek kaynak)
+  useEffect(() => {
+    if (!player) return;
+    const sub = player.addListener('playingChange', (payload) => {
+      setIsPaused(!payload.isPlaying);
+    });
+    setIsPaused(!player.playing);
+    return () => {
+      try {
+        sub.remove();
+      } catch (e) {}
+    };
+  }, [player]);
+
+  // Slayt aktif/pasif olduğunda veya kaydırılırken oynatma kontrolü
+  useEffect(() => {
+    if (!player) return;
+    if (isActive && !isSwiping) {
+      if (!userPausedRef.current) {
+        try { player.play(); } catch (e) {}
+      }
+    } else {
+      try { player.pause(); } catch (e) {}
+    }
+  }, [isActive, isSwiping, player]);
+
+  // Slayttan çıkılınca durumu sıfırla (kaydırınca simgenin ekranda asılı kalmasını önler)
   useEffect(() => {
     if (!isActive) {
-      setIsPaused(false);
+      userPausedRef.current = false;
+      isHoldingFreezeRef.current = false;
+      isSpeedingUpRef.current = false;
       setIsSpeedUp(false);
-      isLongPressPauseRef.current = false;
-      if (longPressTimer.current) clearTimeout(longPressTimer.current);
+      setShowCenterIcon(null);
+      if (centerIconTimer.current) clearTimeout(centerIconTimer.current);
     }
   }, [isActive]);
-
-  useEffect(() => {
-    if (isActive && player && !isSwiping) {
-      if (!isPaused) {
-        player.play();
-      } else {
-        player.pause();
-      }
-    } else if (player) {
-      player.pause();
-    }
-  }, [isActive, player, isPaused, isSwiping]);
 
   useEffect(() => {
     let interval;
     if (isActive && player) {
       interval = setInterval(() => {
-        setProgress(player.currentTime);
+        setProgress(player.currentTime || 0);
         if (player.duration) setDuration(player.duration);
       }, 250);
     }
     return () => clearInterval(interval);
   }, [isActive, player]);
+
+  const triggerCenterIcon = (type) => {
+    if (centerIconTimer.current) clearTimeout(centerIconTimer.current);
+    setShowCenterIcon(type);
+    centerIconTimer.current = setTimeout(() => setShowCenterIcon(null), 500);
+  };
+
+  const handlePressIn = (e) => {
+    touchX.current = e.nativeEvent.pageX;
+  };
+
+  // Basılı tutma:
+  // - Ekranın SAĞ tarafına basılı tutulursa (> width * 0.65) -> 2x Hız!
+  // - Ortasına veya soluna basılı tutulursa -> DONDUR (Donar / Pause)!
+  const handleLongPress = () => {
+    if (!player) return;
+    if (touchX.current > width * 0.65) {
+      isSpeedingUpRef.current = true;
+      try {
+        player.playbackRate = 2.0;
+        setIsSpeedUp(true);
+      } catch (e) {}
+    } else {
+      isHoldingFreezeRef.current = true;
+      wasPlayingBeforeFreezeRef.current = player.playing;
+      if (player.playing) {
+        try { player.pause(); } catch (e) {}
+      }
+    }
+  };
+
+  // Basılı tutma bırakıldığında:
+  const handlePressOut = () => {
+    // 2x hız bırakıldıysa normal hıza geri dön
+    if (isSpeedingUpRef.current) {
+      isSpeedingUpRef.current = false;
+      setIsSpeedUp(false);
+      if (player) {
+        try { player.playbackRate = playbackSpeed; } catch (e) {}
+      }
+    }
+    // Donma (freeze) bırakıldıysa oynatmaya devam et
+    if (isHoldingFreezeRef.current) {
+      isHoldingFreezeRef.current = false;
+      if (wasPlayingBeforeFreezeRef.current && player) {
+        try { player.play(); } catch (e) {}
+      }
+    }
+  };
+
+  // Normal tıklama (basıp bırakma): Oynat / Durdur (Don / Devam Et)
+  const handlePress = () => {
+    if (isHoldingFreezeRef.current || isSpeedingUpRef.current) return;
+    if (!player) return;
+    if (player.playing) {
+      userPausedRef.current = true;
+      try { player.pause(); } catch (e) {}
+      triggerCenterIcon('pause');
+    } else {
+      userPausedRef.current = false;
+      try { player.play(); } catch (e) {}
+      triggerCenterIcon('play');
+    }
+  };
 
   const toggleMute = () => {
     if (player) {
@@ -180,39 +299,20 @@ function ActiveVideoSlide({ item, index, activeIndex, serverIp, onDelete, uiVisi
     if (videoViewRef.current) videoViewRef.current.enterFullscreen();
   };
 
-  const handlePressIn = (e) => {
-    touchX.current = e.nativeEvent.pageX;
-  };
-
-  const handleLongPress = () => {
+  const cycleSpeed = () => {
     if (!player) return;
-    if (touchX.current > width * 0.75 || touchX.current < width * 0.25) {
-      if (!isPaused) {
-        player.playbackRate = 2.0;
-        setIsSpeedUp(true);
-      }
-    } else {
-      setIsPaused(true);
-      isLongPressPauseRef.current = true;
-      setUiVisible(false);
-    }
+    const speeds = [1.0, 1.25, 1.5, 2.0];
+    const nextIdx = (speeds.indexOf(playbackSpeed) + 1) % speeds.length;
+    const next = speeds[nextIdx];
+    player.playbackRate = next;
+    setPlaybackSpeed(next);
   };
 
-  const handlePressOut = () => {
-    if (player) {
-      player.playbackRate = 1.0;
-      setIsSpeedUp(false);
-    }
-    if (isLongPressPauseRef.current) {
-      setIsPaused(false);
-      isLongPressPauseRef.current = false;
-      setUiVisible(true);
-    }
-  };
-
-  const handlePress = () => {
-    setIsPaused(prev => !prev);
-    setUiVisible(prev => !prev);
+  const skipSeconds = (sec) => {
+    if (!player) return;
+    const newTime = Math.max(0, Math.min(duration || 0, (player.currentTime || 0) + sec));
+    player.currentTime = newTime;
+    setProgress(newTime);
   };
 
   const handleSeek = (value) => {
@@ -222,7 +322,8 @@ function ActiveVideoSlide({ item, index, activeIndex, serverIp, onDelete, uiVisi
     }
   };
 
-  const showSlideUi = uiVisible && !isLongPressPauseRef.current;
+  const platform = item.platform || (item.name.includes('tiktok') ? 'tiktok' : item.name.includes('twitter') ? 'x' : 'instagram');
+  const sizeMb = item.size ? `${(item.size / (1024 * 1024)).toFixed(1)} MB` : '';
 
   return (
     <View style={styles.videoContainer}>
@@ -230,82 +331,146 @@ function ActiveVideoSlide({ item, index, activeIndex, serverIp, onDelete, uiVisi
         ref={videoViewRef}
         player={player}
         style={styles.video}
-        contentFit="contain"
+        contentFit={fitMode}
         nativeControls={false}
       />
-      
-      <Pressable 
+
+      {/* Dokunma & Hızlı Kontrol Katmanı */}
+      <Pressable
         style={[StyleSheet.absoluteFill, { zIndex: 5 }]}
         onPressIn={handlePressIn}
         onPress={handlePress}
         onLongPress={handleLongPress}
         onPressOut={handlePressOut}
-        delayLongPress={200}
+        delayLongPress={220}
       >
-        {showSlideUi && (
+        {uiVisible && (
           <LinearGradient
-            colors={['rgba(0,0,0,0.6)', 'transparent', 'transparent', 'rgba(0,0,0,0.9)']}
+            colors={['rgba(9, 9, 11, 0.75)', 'transparent', 'transparent', 'rgba(9, 9, 11, 0.95)']}
             style={styles.gradientOverlay}
             pointerEvents="none"
           />
         )}
 
-        {isPaused && !isLongPressPauseRef.current && (
-          <View style={styles.pauseIconContainer} pointerEvents="none">
-            <Text style={styles.pauseIconText}>DURAKLATILDI</Text>
+        {/* Yalnızca Tıklandığında Anlık (500ms) Beliren Play/Pause Rozeti (Ekranda veya Kaydırmada Asla Asılı Kalmaz!) */}
+        {showCenterIcon && (
+          <View style={styles.centerFlashBadge} pointerEvents="none">
+            <Text style={styles.centerFlashIcon}>
+              {showCenterIcon === 'pause' ? '⏸' : '▶'}
+            </Text>
           </View>
         )}
 
+        {/* 2x Hız Göstergesi (Yalnızca Sağ Tarafa Basılı Tutulunca Görünür) */}
         {isSpeedUp && (
           <View style={styles.speedUpOverlay} pointerEvents="none">
-            <Text style={styles.speedUpText}>2x Hız</Text>
+            <Text style={styles.speedUpText}>⚡ 2x Hız</Text>
           </View>
         )}
       </Pressable>
 
-      {showSlideUi && (
+      {uiVisible && (
         <>
-          {/* Kompakt Yan Menü */}
+          {/* Web Tarzı Sağ Eylem Çubuğu (Glassmorphism Column) */}
           <View style={styles.sideActions} pointerEvents="box-none">
-            <TouchableOpacity style={styles.sideBtn} onPress={toggleMute}>
-              <View style={[styles.iconCircle, isMuted && { backgroundColor: 'rgba(239, 68, 68, 0.5)', borderColor: 'rgba(239, 68, 68, 0.4)' }]}>
-                <Text style={styles.actionBtnLabel}>{isMuted ? 'X' : 'SES'}</Text>
+            {/* 1. Ses Butonu (Mute/Unmute) */}
+            <TouchableOpacity style={styles.sideBtn} onPress={toggleMute} activeOpacity={0.8}>
+              <View style={[styles.iconCircle, isMuted && styles.iconCircleActive]}>
+                <Text style={[styles.actionBtnLabel, isMuted && { color: '#fff' }]}>
+                  {isMuted ? 'MUTE' : 'SES'}
+                </Text>
               </View>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.sideBtn} onPress={toggleFullscreen}>
-              <View style={styles.iconCircle}>
-                <Text style={styles.actionBtnLabel}>TAM</Text>
+            {/* 2. Format / Sığdırma (Fit Contain vs Cover) */}
+            <TouchableOpacity style={styles.sideBtn} onPress={onToggleFit} activeOpacity={0.8}>
+              <View style={[styles.iconCircle, fitMode === 'cover' && styles.iconCircleActive]}>
+                <Text style={styles.actionBtnLabel}>
+                  {fitMode === 'cover' ? 'TAM' : 'SIĞ'}
+                </Text>
               </View>
             </TouchableOpacity>
-            
-            {item.isLocal && (
-              <TouchableOpacity style={styles.sideBtn} onPress={() => onDelete(item)}>
-                <View style={[styles.iconCircle, { backgroundColor: 'rgba(239, 68, 68, 0.6)' }]}>
-                  <Text style={styles.actionBtnLabel}>SİL</Text>
+
+            {/* 3. Favori Kalp Butonu */}
+            <TouchableOpacity
+              style={styles.sideBtn}
+              onPress={() => onToggleFavorite && onToggleFavorite(item)}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.iconCircle, isFavorite && styles.iconCircleHeart]}>
+                <Text style={{ fontSize: 18 }}>{isFavorite ? '❤️' : '🤍'}</Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* 4. Oynatma Hızı */}
+            <TouchableOpacity style={styles.sideBtn} onPress={cycleSpeed} activeOpacity={0.8}>
+              <View style={[styles.iconCircle, playbackSpeed !== 1.0 && styles.iconCircleActive]}>
+                <Text style={styles.actionBtnLabel}>{playbackSpeed}x</Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* 5. Tam Ekran */}
+            <TouchableOpacity style={styles.sideBtn} onPress={toggleFullscreen} activeOpacity={0.8}>
+              <View style={styles.iconCircle}>
+                <Text style={styles.actionBtnLabel}>⛶</Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* 6. Yerel Sil veya İndir */}
+            {item.isLocal ? (
+              <TouchableOpacity style={styles.sideBtn} onPress={() => onDelete(item)} activeOpacity={0.8}>
+                <View style={[styles.iconCircle, { backgroundColor: 'rgba(225, 29, 72, 0.45)', borderColor: '#e11d48' }]}>
+                  <Text style={[styles.actionBtnLabel, { color: '#fff' }]}>SİL</Text>
                 </View>
               </TouchableOpacity>
-            )}
+            ) : onDownloadSingle ? (
+              <TouchableOpacity style={styles.sideBtn} onPress={() => onDownloadSingle(item)} activeOpacity={0.8}>
+                <View style={[styles.iconCircle, { backgroundColor: 'rgba(225, 29, 72, 0.25)', borderColor: 'rgba(225,29,72,0.6)' }]}>
+                  <Text style={[styles.actionBtnLabel, { color: '#e11d48' }]}>İNDİR</Text>
+                </View>
+              </TouchableOpacity>
+            ) : null}
           </View>
 
-          {/* Alt Bilgi */}
+          {/* Alt Bilgi & Rozetler */}
           <View style={styles.videoInfo} pointerEvents="none">
-            <View style={{ flexDirection: 'row', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
+            <View style={{ flexDirection: 'row', gap: 6, marginBottom: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+              <View style={[styles.badge, styles.badgePlatform]}>
+                <Text style={styles.badgePlatformText}>
+                  {platform === 'tiktok' ? 'TIKTOK' : platform === 'x' ? 'X / TWITTER' : platform === 'youtube' ? 'YOUTUBE' : 'INSTAGRAM'}
+                </Text>
+              </View>
               <View style={[styles.badge, item.isLocal ? styles.badgeLocal : styles.badgeServer]}>
                 <Text style={styles.badgeText}>{item.isLocal ? 'Offline' : 'Sunucu'}</Text>
               </View>
               {item.uploader && item.uploader !== 'Genel' && (
-                <View style={[styles.badge, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
-                  <Text style={styles.badgeText}>@{item.uploader}</Text>
+                <View style={[styles.badge, styles.badgeUploader]}>
+                  <Text style={styles.badgeUploaderText}>@{item.uploader}</Text>
                 </View>
               )}
+              {sizeMb ? (
+                <View style={[styles.badge, styles.badgeUploader]}>
+                  <Text style={styles.badgeUploaderText}>{sizeMb}</Text>
+                </View>
+              ) : null}
             </View>
-            <Text style={styles.videoName} numberOfLines={1} ellipsizeMode="tail">{getCleanTitle(item.name)}</Text>
+            <Text style={styles.videoName} numberOfLines={2} ellipsizeMode="tail">
+              {getCleanTitle(item.name)}
+            </Text>
           </View>
 
-          {/* Zarif Alt Scrubber */}
+          {/* Web Tarzı Alt Scrubber & Hızlı Sarma Kontrolleri */}
           <View style={styles.scrubberContainer}>
+            <TouchableOpacity
+              style={styles.skipBtnSmall}
+              onPress={() => skipSeconds(-5)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.skipBtnText}>-5s</Text>
+            </TouchableOpacity>
+
             <Text style={styles.timeText}>{formatTime(progress)}</Text>
+
             <Slider
               style={styles.slider}
               minimumValue={0}
@@ -313,11 +478,20 @@ function ActiveVideoSlide({ item, index, activeIndex, serverIp, onDelete, uiVisi
               value={progress}
               onValueChange={handleSeek}
               onSlidingComplete={handleSeek}
-              minimumTrackTintColor="#00f2ea"
-              maximumTrackTintColor="rgba(255,255,255,0.2)"
-              thumbTintColor="#fff"
+              minimumTrackTintColor="#e11d48"
+              maximumTrackTintColor="rgba(255,255,255,0.22)"
+              thumbTintColor="#e11d48"
             />
+
             <Text style={styles.timeText}>{formatTime(duration)}</Text>
+
+            <TouchableOpacity
+              style={styles.skipBtnSmall}
+              onPress={() => skipSeconds(5)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.skipBtnText}>+5s</Text>
+            </TouchableOpacity>
           </View>
         </>
       )}
@@ -360,10 +534,21 @@ function YouTubeHub({ list, serverIp, onBack, onDelete }) {
     p.muted = false;
   });
 
+  // Native oynatıcı durumunu dinle
+  useEffect(() => {
+    if (!player) return;
+    const sub = player.addListener('playingChange', (p) => {
+      setIsPaused(!p.isPlaying);
+    });
+    setIsPaused(!player.playing);
+    return () => {
+      try { sub.remove(); } catch (e) {}
+    };
+  }, [player]);
+
   useEffect(() => {
     if (player && selectedVideo) {
-      player.play();
-      setIsPaused(false);
+      try { player.play(); } catch (e) {}
       resetControlsTimer();
     }
   }, [selectedVideo, player]);
@@ -390,12 +575,10 @@ function YouTubeHub({ list, serverIp, onBack, onDelete }) {
 
   const togglePlayPause = () => {
     if (!player) return;
-    if (isPaused) {
-      player.play();
-      setIsPaused(false);
+    if (player.playing) {
+      try { player.pause(); } catch (e) {}
     } else {
-      player.pause();
-      setIsPaused(true);
+      try { player.play(); } catch (e) {}
     }
     resetControlsTimer();
   };
@@ -615,8 +798,10 @@ export default function App() {
   const [dlSkippedFiles, setDlSkippedFiles] = useState(0);
   const dlCancelRef = useRef(false);
   
-  // Mod: 'menu' (Ana Menü), 'instagram' (Reels), 'tiktok' (TikTok), 'youtube' (YouTube Stüdyo)
+  // Mod: 'menu' (Ana Menü), 'all' (Tüm Videolar), 'tiktok', 'x' (X / Twitter), 'instagram', 'youtube', 'favorites'
   const [currentMode, setCurrentMode] = useState('menu');
+  const [favorites, setFavorites] = useState([]);
+  const [fitMode, setFitMode] = useState('contain'); // 'contain' | 'cover'
   
   const [activeIndex, setActiveIndex] = useState(0);
   const [uiVisible, setUiVisible] = useState(true);
@@ -624,7 +809,7 @@ export default function App() {
   const [showJumpPrompt, setShowJumpPrompt] = useState(false);
   const [jumpIndex, setJumpIndex] = useState('');
   const [savedFolderUri, setSavedFolderUri] = useState(null);
-  const [lastWatched, setLastWatched] = useState({ instagram: 0, tiktok: 0, youtube: 0 });
+  const [lastWatched, setLastWatched] = useState({ instagram: 0, tiktok: 0, youtube: 0, x: 0, all: 0 });
   const [selectedProfile, setSelectedProfile] = useState('all');
   
   const pagerRef = useRef(null);
@@ -632,6 +817,34 @@ export default function App() {
   useEffect(() => {
     loadLocalVideos();
   }, []);
+
+  // Favorileri yükle
+  useEffect(() => {
+    AsyncStorage.getItem('video_pro_favorites_v1').then(stored => {
+      try {
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed)) {
+            setFavorites(parsed.map(item => typeof item === 'string' ? item : (item.id || item.url || item.path || '')));
+          }
+        }
+      } catch (e) {}
+    });
+  }, []);
+
+  const toggleFavorite = async (video) => {
+    const key = video.uri || video.path || video.name;
+    let next;
+    if (favorites.includes(key)) {
+      next = favorites.filter(k => k !== key);
+    } else {
+      next = [...favorites, key];
+    }
+    setFavorites(next);
+    try {
+      await AsyncStorage.setItem('video_pro_favorites_v1', JSON.stringify(next));
+    } catch (e) {}
+  };
 
   // Kaydedilmiş klasör ve son pozisyonları yükle
   useEffect(() => {
@@ -644,12 +857,16 @@ export default function App() {
     Promise.all([
       AsyncStorage.getItem('lastWatched_instagram'),
       AsyncStorage.getItem('lastWatched_tiktok'),
-      AsyncStorage.getItem('lastWatched_youtube')
-    ]).then(([ig, tt, yt]) => {
+      AsyncStorage.getItem('lastWatched_youtube'),
+      AsyncStorage.getItem('lastWatched_x'),
+      AsyncStorage.getItem('lastWatched_all')
+    ]).then(([ig, tt, yt, x, all]) => {
       setLastWatched({
         instagram: ig ? parseInt(ig, 10) : 0,
         tiktok: tt ? parseInt(tt, 10) : 0,
-        youtube: yt ? parseInt(yt, 10) : 0
+        youtube: yt ? parseInt(yt, 10) : 0,
+        x: x ? parseInt(x, 10) : 0,
+        all: all ? parseInt(all, 10) : 0,
       });
     });
   }, []);
@@ -773,51 +990,14 @@ export default function App() {
     }
   };
 
-  // Bildirim izni al (uygulama başlangıcında bir kere)
-  useEffect(() => {
-    if (!Notifications) return;
-    (async () => {
-      try {
-        const { status } = await Notifications.getPermissionsAsync();
-        if (status !== 'granted') {
-          await Notifications.requestPermissionsAsync();
-        }
-      } catch (e) {}
-    })();
-  }, []);
-
-  // İndirme bildirim ID'sini takip et
-  const dlNotifIdRef = useRef(null);
-
-  const updateDownloadNotification = async (current, total, fileName) => {
-    if (!Notifications) return;
-    try {
-      if (dlNotifIdRef.current) {
-        await Notifications.dismissNotificationAsync(dlNotifIdRef.current);
-      }
-      dlNotifIdRef.current = await Notifications.scheduleNotificationAsync({
-        content: {
-          title: `📥 İndirme: ${current}/${total}`,
-          body: fileName,
-          data: { type: 'download_progress' },
-          sticky: true,
-        },
-        trigger: null,
-      });
-    } catch (e) {}
-  };
-
+  // İndirme tamamlandığında tek seferlik bildirim (isteğe bağlı ve sessiz)
   const showDownloadCompleteNotification = async (count, skipped) => {
     if (!Notifications) return;
     try {
-      if (dlNotifIdRef.current) {
-        await Notifications.dismissNotificationAsync(dlNotifIdRef.current);
-        dlNotifIdRef.current = null;
-      }
       await Notifications.scheduleNotificationAsync({
         content: {
           title: '✅ İndirme Tamamlandı',
-          body: `${count} video indirildi${skipped > 0 ? `, ${skipped} zaten vardı` : ''}`,
+          body: `${count} yeni video indirildi${skipped > 0 ? `, ${skipped} zaten vardı` : ''}`,
           data: { type: 'download_complete' },
         },
         trigger: null,
@@ -853,10 +1033,21 @@ export default function App() {
       if (!folderUri) return;
     }
 
-    // Arka plan desteği: Ekranı uyanık tut + bildirim göster
+    // Arka plan desteği: Ekranı uyanık tut
     try {
       await activateKeepAwakeAsync('download');
     } catch (e) {}
+
+    // Platform klasörlerini döngüye girmeden önce bir defada hazırla (Hız optimizasyonu)
+    for (const plat of ['instagram', 'tiktok', 'youtube', 'twitter', 'x']) {
+      try {
+        const platDir = FileSystem.documentDirectory + `reels/${plat}/`;
+        const dirInfo = await FileSystem.getInfoAsync(platDir);
+        if (!dirInfo.exists) {
+          await FileSystem.makeDirectoryAsync(platDir, { intermediates: true });
+        }
+      } catch (e) {}
+    }
 
     // Modal'ı aç ve başlangıç state'lerini ayarla
     dlCancelRef.current = false;
@@ -881,17 +1072,6 @@ export default function App() {
       setDlCurrentIdx(i + 1);
       setDlCurrentFile(getCleanTitle(file.name));
       setDlProgress(`${i + 1}/${serverVideos.length} indiriliyor...`);
-
-      // Bildirim güncelle (arka planda da görünsün)
-      await updateDownloadNotification(i + 1, serverVideos.length, getCleanTitle(file.name));
-
-      // Klasörü oluştur (her seferinde kontrol et)
-      try {
-        const dirInfo = await FileSystem.getInfoAsync(dir);
-        if (!dirInfo.exists) {
-          await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
-        }
-      } catch (e) {}
 
       const exists = await FileSystem.getInfoAsync(fileUri);
       if (!exists.exists) {
@@ -938,49 +1118,127 @@ export default function App() {
     loadLocalVideos();
   };
 
+  // Harici SAF Klasöründeki Videoları Temizleme Fonksiyonu
+  const executeSafClean = async (folderUri) => {
+    try {
+      let safDeleted = 0;
+      let safFiles = [];
+      try {
+        safFiles = await FileSystem.StorageAccessFramework.readDirectoryAsync(folderUri);
+      } catch (readErr) {
+        console.log('SAF okuma hatası:', readErr);
+      }
+
+      if (safFiles && safFiles.length > 0) {
+        for (const fileUri of safFiles) {
+          try {
+            const dec = decodeURIComponent(fileUri).toLowerCase();
+            // Video uzantıları veya platform isimleri içeren dosyalar
+            if (dec.endsWith('.mp4') || dec.includes('.mp4') || dec.includes('video') || dec.includes('reels') || dec.includes('tiktok') || dec.includes('twitter') || dec.includes('instagram')) {
+              try {
+                // SAF dosyaları StorageAccessFramework.deleteAsync ile silinir!
+                await FileSystem.StorageAccessFramework.deleteAsync(fileUri);
+                safDeleted++;
+              } catch (delErr1) {
+                try {
+                  await FileSystem.deleteAsync(fileUri, { idempotent: true });
+                  safDeleted++;
+                } catch (delErr2) {}
+              }
+            }
+          } catch (e) {
+            console.log('Dosya silinemedi:', fileUri, e);
+          }
+        }
+      }
+
+      setLocalVideos([]);
+      setLastWatched({ instagram: 0, tiktok: 0, youtube: 0, x: 0, all: 0 });
+      Alert.alert(
+        'Temizlendi!',
+        `Tüm reels videoları başarıyla silindi.${safDeleted > 0 ? `\n\n• ${safDeleted} video seçili harici klasörden silindi.` : ''}\n• Uygulama içi tüm önbellek boşaltıldı.`
+      );
+      loadLocalVideos();
+    } catch (err) {
+      Alert.alert('Bilgi', 'Uygulama içi depolama temizlendi: ' + err.message);
+    }
+  };
+
   const deleteAllOffline = async () => {
     Alert.alert(
-      'Tüm Offline Videoları Sil',
-      'İndirilen tüm videolar cihazdan ve seçili klasörden silinecek. Emin misin?',
+      'Tüm Videoları Sil',
+      'İndirilen tüm reels videoları hem cihazın klasöründen hem de uygulamadan tamamen silinecektir. Devam edilsin mi?',
       [
         { text: 'İptal', style: 'cancel' },
-        { text: 'Evet, Sil', style: 'destructive', onPress: async () => {
+        { 
+          text: 'Evet, Tümünü Sil', 
+          style: 'destructive', 
+          onPress: async () => {
             try {
-              // 1) Dahili uygulama deposundaki videoları sil
-              const igDir = FileSystem.documentDirectory + 'reels/instagram/';
-              const ttDir = FileSystem.documentDirectory + 'reels/tiktok/';
-              const ytDir = FileSystem.documentDirectory + 'reels/youtube/';
-              for (const dir of [igDir, ttDir, ytDir]) {
-                const info = await FileSystem.getInfoAsync(dir);
-                if (info.exists) await FileSystem.deleteAsync(dir, { idempotent: true });
-              }
+              // 1) Dahili uygulama klasörlerini temizle
+              const internalDirs = [
+                FileSystem.documentDirectory + 'reels/instagram/',
+                FileSystem.documentDirectory + 'reels/tiktok/',
+                FileSystem.documentDirectory + 'reels/youtube/',
+                FileSystem.documentDirectory + 'reels/twitter/',
+                FileSystem.documentDirectory + 'reels/x/',
+                FileSystem.documentDirectory + 'reels/',
+              ];
 
-              // 2) SAF klasöründeki (harici indirme klasörü) videoları da sil
-              let safDeleted = 0;
-              const folderUri = savedFolderUri || await AsyncStorage.getItem('downloadFolderUri');
-              if (folderUri) {
+              for (const dir of internalDirs) {
                 try {
-                  const safFiles = await FileSystem.StorageAccessFramework.readDirectoryAsync(folderUri);
-                  for (const fileUri of safFiles) {
-                    try {
-                      // Sadece mp4 dosyaları sil
-                      const decodedUri = decodeURIComponent(fileUri);
-                      if (decodedUri.toLowerCase().endsWith('.mp4')) {
-                        await FileSystem.deleteAsync(fileUri, { idempotent: true });
-                        safDeleted++;
-                      }
-                    } catch (e) {
-                      // Tek dosya silinemezse devam et
-                    }
+                  const info = await FileSystem.getInfoAsync(dir);
+                  if (info && info.exists) {
+                    await FileSystem.deleteAsync(dir, { idempotent: true });
                   }
-                } catch (safErr) {
-                  console.log('SAF klasörü okunamadı:', safErr.message);
-                }
+                } catch (e) {}
               }
 
-              setLocalVideos([]);
-              setLastWatched({ instagram: 0, tiktok: 0, youtube: 0 });
-              Alert.alert('Başarılı', `Tüm offline videolar temizlendi.${safDeleted > 0 ? `\n${safDeleted} dosya harici klasörden de silindi.` : ''}`);
+              // Yeniden boş klasörleri oluştur
+              for (const dir of [
+                FileSystem.documentDirectory + 'reels/instagram/',
+                FileSystem.documentDirectory + 'reels/tiktok/',
+                FileSystem.documentDirectory + 'reels/youtube/',
+                FileSystem.documentDirectory + 'reels/twitter/',
+              ]) {
+                try {
+                  await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+                } catch (e) {}
+              }
+
+              // 2) Harici SAF klasörünü kontrol et
+              let folderUri = savedFolderUri || await AsyncStorage.getItem('downloadFolderUri');
+
+              if (!folderUri) {
+                Alert.alert(
+                  'Klasör Doğrulama',
+                  'Cihazınızdaki indirme klasörünü seçerek oradaki tüm videoları da silmek ister misiniz?',
+                  [
+                    { 
+                      text: 'Yalnızca Dahiliyi Sil', 
+                      style: 'cancel', 
+                      onPress: () => {
+                        setLocalVideos([]);
+                        Alert.alert('Tamamlandı', 'Uygulama içi tüm videolar temizlendi.');
+                        loadLocalVideos();
+                      }
+                    },
+                    {
+                      text: 'Klasörü Seç & Sil',
+                      onPress: async () => {
+                        const picked = await pickDownloadFolder();
+                        if (picked) {
+                          await executeSafClean(picked);
+                        }
+                      }
+                    }
+                  ]
+                );
+                return;
+              }
+
+              await executeSafClean(folderUri);
+
             } catch (err) {
               Alert.alert('Hata', 'Silme sırasında bir hata oluştu: ' + err.message);
             }
@@ -993,39 +1251,119 @@ export default function App() {
   const deleteVideo = async (item) => {
     Alert.alert('Video Silinsin mi?', item.name, [
       { text: 'İptal', style: 'cancel' },
-      { text: 'Sil', style: 'destructive', onPress: async () => {
+      { 
+        text: 'Sil', 
+        style: 'destructive', 
+        onPress: async () => {
           try {
-            await FileSystem.deleteAsync(item.uri, { idempotent: true });
-            setLocalVideos(prev => prev.filter(v => v.uri !== item.uri));
+            // 1. item.uri sil (SAF ise StorageAccessFramework.deleteAsync)
+            if (item.uri) {
+              if (item.uri.startsWith('content://')) {
+                try {
+                  await FileSystem.StorageAccessFramework.deleteAsync(item.uri);
+                } catch (e) {
+                  await FileSystem.deleteAsync(item.uri, { idempotent: true });
+                }
+              } else {
+                await FileSystem.deleteAsync(item.uri, { idempotent: true });
+              }
+            }
+
+            // 2. Harici klasörde de varsa onu da temizle
+            const folderUri = savedFolderUri || await AsyncStorage.getItem('downloadFolderUri');
+            if (folderUri) {
+              try {
+                const files = await FileSystem.StorageAccessFramework.readDirectoryAsync(folderUri);
+                for (const fUri of files) {
+                  if (decodeURIComponent(fUri).includes(item.name)) {
+                    await FileSystem.StorageAccessFramework.deleteAsync(fUri);
+                  }
+                }
+              } catch (e) {}
+            }
+
+            setLocalVideos(prev => prev.filter(v => v.uri !== item.uri && v.name !== item.name));
             setActiveIndex(prev => Math.max(0, prev - 1));
-          } catch(e) {}
+          } catch(e) {
+            Alert.alert('Hata', 'Video silinemedi: ' + e.message);
+          }
         }
       }
     ]);
   };
 
+  // Tekil video indirme (VideoSlide yan menüsünden)
+  const downloadSingleVideo = async (file) => {
+    try {
+      let folderUri = savedFolderUri || await AsyncStorage.getItem('downloadFolderUri');
+      const isTikTok = file.platform === 'tiktok' || file.name.includes('tiktok');
+      const isTwitter = file.platform === 'x' || file.platform === 'twitter' || file.name.includes('twitter');
+      const isYoutube = file.platform === 'youtube' || file.name.includes('youtube');
+      const targetPlatform = isTikTok ? 'tiktok' : (isTwitter ? 'twitter' : (isYoutube ? 'youtube' : 'instagram'));
+      const dir = FileSystem.documentDirectory + `reels/${targetPlatform}/`;
+      const fileUri = dir + file.name;
+
+      const dirInfo = await FileSystem.getInfoAsync(dir);
+      if (!dirInfo.exists) await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+
+      const cleanIp = serverIp.trim();
+      let downloadUrl = cleanIp.startsWith('http') ? `${cleanIp}${file.path}` : `http://${cleanIp}:3000${file.path}`;
+      const downloadRes = await FileSystem.downloadAsync(downloadUrl, fileUri);
+
+      if (folderUri) {
+        try {
+          const base64Data = await FileSystem.readAsStringAsync(downloadRes.uri, { encoding: FileSystem.EncodingType.Base64 });
+          const newFileUri = await FileSystem.StorageAccessFramework.createFileAsync(folderUri, file.name, 'video/mp4');
+          await FileSystem.writeAsStringAsync(newFileUri, base64Data, { encoding: FileSystem.EncodingType.Base64 });
+        } catch (e) {}
+      }
+      Alert.alert('İndirildi!', `"${getCleanTitle(file.name)}" cihazına kaydedildi.`);
+      loadLocalVideos();
+    } catch (err) {
+      Alert.alert('İndirme Hatası', err.message);
+    }
+  };
+
   // Platform bazlı listeler
   const getListForPlatform = (plat) => {
-    const local = localVideos.filter(v => v.platform === plat);
+    if (plat === 'favorites') {
+      const source = serverVideos.length > 0 ? serverVideos : localVideos;
+      return source.filter(v => favorites.includes(v.uri || v.path || v.name));
+    }
+    if (plat === 'all') {
+      return serverVideos.length > 0 ? serverVideos : localVideos;
+    }
+    const local = localVideos.filter(v => {
+      if (plat === 'x') return v.platform === 'x' || v.platform === 'twitter' || v.name.includes('twitter');
+      return v.platform === plat;
+    });
     if (local.length > 0) return local;
+
     return serverVideos.filter(v => {
       if (plat === 'instagram') return v.platform === 'instagram' || v.name.includes('instagram') || v.name.includes('reels');
       if (plat === 'tiktok') return v.platform === 'tiktok' || v.name.includes('tiktok');
+      if (plat === 'x') return v.platform === 'x' || v.platform === 'twitter' || v.name.includes('twitter');
       if (plat === 'youtube') return v.platform === 'youtube' || v.name.includes('youtube');
       return false;
     });
   };
 
+  const allList = useMemo(() => getListForPlatform('all'), [localVideos, serverVideos]);
   const igList = useMemo(() => getListForPlatform('instagram'), [localVideos, serverVideos]);
   const ttList = useMemo(() => getListForPlatform('tiktok'), [localVideos, serverVideos]);
+  const xList = useMemo(() => getListForPlatform('x'), [localVideos, serverVideos]);
   const ytList = useMemo(() => getListForPlatform('youtube'), [localVideos, serverVideos]);
+  const favList = useMemo(() => getListForPlatform('favorites'), [localVideos, serverVideos, favorites]);
 
   const currentList = useMemo(() => {
+    if (currentMode === 'all') return allList;
     if (currentMode === 'instagram') return igList;
     if (currentMode === 'tiktok') return ttList;
+    if (currentMode === 'x') return xList;
     if (currentMode === 'youtube') return ytList;
+    if (currentMode === 'favorites') return favList;
     return [];
-  }, [currentMode, igList, ttList, ytList]);
+  }, [currentMode, allList, igList, ttList, xList, ytList, favList]);
 
   // ============================================
   // EKRAN 1: ANA GİRİŞ / MOD SEÇİM DASHBOARD'U
@@ -1034,28 +1372,33 @@ export default function App() {
     return (
       <View style={styles.container}>
         <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
-        <LinearGradient colors={['#0f1019', '#07070a']} style={styles.menuContainer}>
+        <LinearGradient colors={['#09090b', '#121217', '#09090b']} style={styles.menuContainer}>
           
-          {/* Header */}
+          {/* Header (Web Sitesi İle Uyumlu Siyah & Kırmızı) */}
           <View style={styles.menuHeader}>
             <Image source={require('./assets/logo.jpg')} style={styles.menuLogo} />
             <View>
-              <Text style={styles.menuTitle}>Reels Studio</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={styles.menuTitle}>Reels İndirici</Text>
+                <View style={styles.headerProBadge}>
+                  <Text style={styles.headerProText}>PRO</Text>
+                </View>
+              </View>
               <Text style={styles.menuSubtitle}>Video & Akış Merkezi</Text>
             </View>
           </View>
 
-          {/* IP Bağlantı Çubuğu */}
+          {/* IP Bağlantı Çubuğu (Kırmızı/Antrasit Glass) */}
           <View style={styles.ipBar}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.ipLabel}>Sunucu IP</Text>
+              <Text style={styles.ipLabel}>SUNUCU IP ADRESİ</Text>
               <TextInput
                 style={styles.ipInput}
                 value={serverIp}
                 onChangeText={setServerIp}
                 keyboardType="decimal-pad"
                 placeholder="192.168.1.X"
-                placeholderTextColor="#666"
+                placeholderTextColor="#71717a"
               />
             </View>
             <TouchableOpacity 
@@ -1064,9 +1407,9 @@ export default function App() {
               disabled={isScanning}
             >
               {isScanning ? (
-                <ActivityIndicator color="#00f2ea" size="small" />
+                <ActivityIndicator color="#e11d48" size="small" />
               ) : (
-                <Text style={styles.ipScanText}>Tara</Text>
+                <Text style={styles.ipScanText}>TARA</Text>
               )}
             </TouchableOpacity>
             <TouchableOpacity 
@@ -1077,17 +1420,95 @@ export default function App() {
               {loading ? (
                 <ActivityIndicator color="#fff" size="small" />
               ) : (
-                <Text style={styles.ipConnectText}>{isConnected ? 'Bağlı' : 'Bağlan'}</Text>
+                <Text style={styles.ipConnectText}>{isConnected ? '✓ BAĞLI' : 'BAĞLAN'}</Text>
               )}
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.sectionHeaderTitle}>İzlemek İstediğin Modu Seç</Text>
+          <Text style={styles.sectionHeaderTitle}>İzlemek İstediğin Akışı Seç</Text>
 
-          {/* 3 BÜYÜK MOD KARTI */}
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ gap: 14, paddingBottom: 30 }}>
+          {/* MOD KARTLARI (Siyah & Kırmızı Modern Kartlar) */}
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ gap: 12, paddingBottom: 35 }}>
             
-            {/* KART 1: INSTAGRAM REELS */}
+            {/* KART 0: TÜM VİDEOLAR / ARŞİV */}
+            <TouchableOpacity 
+              style={[styles.modeCard, { borderColor: 'rgba(225, 29, 72, 0.5)' }]} 
+              onPress={() => {
+                setCurrentMode('all');
+                const last = lastWatched.all || 0;
+                setActiveIndex(last < allList.length ? last : 0);
+              }}
+              activeOpacity={0.85}
+            >
+              <LinearGradient colors={['rgba(225, 29, 72, 0.25)', 'rgba(18, 18, 23, 0.85)']} style={StyleSheet.absoluteFill} />
+              <View style={styles.modeCardContent}>
+                <View style={[styles.modeIconCircle, { backgroundColor: '#e11d48' }]}>
+                  <Text style={{ fontSize: 13, color: '#fff', fontWeight: 'bold' }}>ALL</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.modeCardTitle}>Tüm Videolar (Arşiv)</Text>
+                  <Text style={styles.modeCardDesc}>TikTok, Twitter, Instagram hepsi bir arada</Text>
+                  <Text style={[styles.modeCardBadge, { color: '#e11d48', backgroundColor: 'rgba(225,29,72,0.18)' }]}>
+                    {allList.length} Video
+                  </Text>
+                </View>
+                <Text style={styles.modeArrow}>{'>'}</Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* KART 1: TIKTOK */}
+            <TouchableOpacity 
+              style={[styles.modeCard, { borderColor: 'rgba(255, 255, 255, 0.15)' }]} 
+              onPress={() => {
+                setCurrentMode('tiktok');
+                const last = lastWatched.tiktok || 0;
+                setActiveIndex(last < ttList.length ? last : 0);
+              }}
+              activeOpacity={0.85}
+            >
+              <LinearGradient colors={['rgba(225, 29, 72, 0.15)', 'rgba(18, 18, 23, 0.85)']} style={StyleSheet.absoluteFill} />
+              <View style={styles.modeCardContent}>
+                <View style={[styles.modeIconCircle, { backgroundColor: '#181820', borderWidth: 1, borderColor: '#e11d48' }]}>
+                  <Text style={{ fontSize: 13, color: '#e11d48', fontWeight: '900' }}>TT</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.modeCardTitle}>TikTok Keşfet</Text>
+                  <Text style={styles.modeCardDesc}>Otomatik toplanan dikey videolar</Text>
+                  <Text style={[styles.modeCardBadge, { color: '#e11d48', backgroundColor: 'rgba(225,29,72,0.15)' }]}>
+                    {ttList.length} Video
+                  </Text>
+                </View>
+                <Text style={styles.modeArrow}>{'>'}</Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* KART 2: X / TWITTER */}
+            <TouchableOpacity 
+              style={[styles.modeCard, { borderColor: 'rgba(255, 255, 255, 0.15)' }]} 
+              onPress={() => {
+                setCurrentMode('x');
+                const last = lastWatched.x || 0;
+                setActiveIndex(last < xList.length ? last : 0);
+              }}
+              activeOpacity={0.85}
+            >
+              <LinearGradient colors={['rgba(255, 255, 255, 0.06)', 'rgba(18, 18, 23, 0.85)']} style={StyleSheet.absoluteFill} />
+              <View style={styles.modeCardContent}>
+                <View style={[styles.modeIconCircle, { backgroundColor: '#000', borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)' }]}>
+                  <Text style={{ fontSize: 14, color: '#fff', fontWeight: '900' }}>𝕏</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.modeCardTitle}>X / Twitter Akışı</Text>
+                  <Text style={styles.modeCardDesc}>Kullanıcı profilleri ve taranan videolar</Text>
+                  <Text style={[styles.modeCardBadge, { color: '#fff', backgroundColor: 'rgba(255,255,255,0.1)' }]}>
+                    {xList.length} Video
+                  </Text>
+                </View>
+                <Text style={styles.modeArrow}>{'>'}</Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* KART 3: INSTAGRAM REELS */}
             <TouchableOpacity 
               style={[styles.modeCard, { borderColor: 'rgba(225, 48, 108, 0.4)' }]} 
               onPress={() => {
@@ -1097,53 +1518,29 @@ export default function App() {
               }}
               activeOpacity={0.85}
             >
-              <LinearGradient colors={['rgba(225, 48, 108, 0.2)', 'rgba(0,0,0,0.5)']} style={StyleSheet.absoluteFill} />
+              <LinearGradient colors={['rgba(225, 48, 108, 0.2)', 'rgba(18, 18, 23, 0.85)']} style={StyleSheet.absoluteFill} />
               <View style={styles.modeCardContent}>
-                <View style={[styles.modeIconCircle, { backgroundColor: '#E1306C' }]}>
+                <View style={[styles.modeIconCircle, { backgroundColor: '#c13584' }]}>
                   <Text style={{ fontSize: 13, color: '#fff', fontWeight: 'bold' }}>IG</Text>
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.modeCardTitle}>Instagram Reels</Text>
                   <Text style={styles.modeCardDesc}>Dikey tam ekran akış</Text>
-                  <Text style={styles.modeCardBadge}>{igList.length} Video</Text>
-                </View>
-                <Text style={styles.modeArrow}>{'>'}</Text>
-              </View>
-            </TouchableOpacity>
-
-            {/* KART 2: TIKTOK */}
-            <TouchableOpacity 
-              style={[styles.modeCard, { borderColor: 'rgba(0, 242, 234, 0.4)' }]} 
-              onPress={() => {
-                setCurrentMode('tiktok');
-                const last = lastWatched.tiktok || 0;
-                setActiveIndex(last < ttList.length ? last : 0);
-              }}
-              activeOpacity={0.85}
-            >
-              <LinearGradient colors={['rgba(0, 242, 234, 0.15)', 'rgba(0,0,0,0.5)']} style={StyleSheet.absoluteFill} />
-              <View style={styles.modeCardContent}>
-                <View style={[styles.modeIconCircle, { backgroundColor: '#00f2ea' }]}>
-                  <Text style={{ fontSize: 13, color: '#000', fontWeight: 'bold' }}>TT</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.modeCardTitle}>TikTok Keşfet</Text>
-                  <Text style={styles.modeCardDesc}>Otomatik toplanan videolar</Text>
-                  <Text style={[styles.modeCardBadge, { color: '#00f2ea', backgroundColor: 'rgba(0,242,234,0.15)' }]}>
-                    {ttList.length} Video
+                  <Text style={[styles.modeCardBadge, { color: '#e1306c', backgroundColor: 'rgba(225,48,108,0.15)' }]}>
+                    {igList.length} Video
                   </Text>
                 </View>
                 <Text style={styles.modeArrow}>{'>'}</Text>
               </View>
             </TouchableOpacity>
 
-            {/* KART 3: YOUTUBE STÜDYO (AYRI GENİŞ EKRAN) */}
+            {/* KART 4: YOUTUBE STÜDYO (16:9 GENİŞ EKRAN) */}
             <TouchableOpacity 
               style={[styles.modeCard, { borderColor: 'rgba(239, 68, 68, 0.5)' }]} 
               onPress={() => setCurrentMode('youtube')}
               activeOpacity={0.85}
             >
-              <LinearGradient colors={['rgba(239, 68, 68, 0.2)', 'rgba(0,0,0,0.5)']} style={StyleSheet.absoluteFill} />
+              <LinearGradient colors={['rgba(239, 68, 68, 0.2)', 'rgba(18, 18, 23, 0.85)']} style={StyleSheet.absoluteFill} />
               <View style={styles.modeCardContent}>
                 <View style={[styles.modeIconCircle, { backgroundColor: '#ef4444' }]}>
                   <Text style={{ fontSize: 13, color: '#fff', fontWeight: 'bold' }}>YT</Text>
@@ -1159,19 +1556,47 @@ export default function App() {
               </View>
             </TouchableOpacity>
 
-            {/* İndirme & Ayar Butonları */}
+            {/* KART 5: FAVORİLER */}
+            {favList.length > 0 && (
+              <TouchableOpacity 
+                style={[styles.modeCard, { borderColor: 'rgba(225, 29, 72, 0.5)' }]} 
+                onPress={() => {
+                  setCurrentMode('favorites');
+                  setActiveIndex(0);
+                }}
+                activeOpacity={0.85}
+              >
+                <LinearGradient colors={['rgba(225, 29, 72, 0.25)', 'rgba(18, 18, 23, 0.85)']} style={StyleSheet.absoluteFill} />
+                <View style={styles.modeCardContent}>
+                  <View style={[styles.modeIconCircle, { backgroundColor: '#e11d48' }]}>
+                    <Text style={{ fontSize: 16 }}>❤️</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.modeCardTitle}>Favorilerim</Text>
+                    <Text style={styles.modeCardDesc}>Kalp eklenen özel videolar</Text>
+                    <Text style={[styles.modeCardBadge, { color: '#e11d48', backgroundColor: 'rgba(225,29,72,0.18)' }]}>
+                      {favList.length} Video
+                    </Text>
+                  </View>
+                  <Text style={styles.modeArrow}>{'>'}</Text>
+                </View>
+              </TouchableOpacity>
+            )}
+
+            {/* Hızlı İndir Butonu (Canlı Kırmızı Web Teması) */}
             {isConnected && (
               <TouchableOpacity 
                 style={styles.quickDownloadBtn} 
                 onPress={downloading ? () => setShowDlModal(true) : downloadAll}
+                activeOpacity={0.85}
               >
                 {downloading ? (
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                    <ActivityIndicator color="#000" size="small" />
+                    <ActivityIndicator color="#fff" size="small" />
                     <Text style={styles.quickDownloadText}>{dlProgress || 'İndiriliyor...'}</Text>
                   </View>
                 ) : (
-                  <Text style={styles.quickDownloadText}>Tüm Videoları İndir ({serverVideos.length})</Text>
+                  <Text style={styles.quickDownloadText}>Tüm Videoları Cihaza İndir ({serverVideos.length})</Text>
                 )}
               </TouchableOpacity>
             )}
@@ -1227,7 +1652,7 @@ export default function App() {
                   )}
                 </View>
 
-                {/* İlerleme Çubuğu */}
+                {/* İlerleme Çubuğu (Kırmızı) */}
                 <View style={styles.dlProgressContainer}>
                   <View style={styles.dlProgressBarBg}>
                     <View 
@@ -1245,7 +1670,7 @@ export default function App() {
                 {/* Aktif Dosya Bilgisi */}
                 <View style={styles.dlCurrentFileBox}>
                   {downloading ? (
-                    <ActivityIndicator size="small" color="#00f2ea" style={{ marginRight: 8 }} />
+                    <ActivityIndicator size="small" color="#e11d48" style={{ marginRight: 8 }} />
                   ) : (
                     <Text style={{ fontSize: 16, marginRight: 6 }}>✅</Text>
                   )}
@@ -1266,8 +1691,8 @@ export default function App() {
                       ⊘ {dlSkippedFiles} Zaten Var
                     </Text>
                   </View>
-                  <View style={[styles.dlStatBadge, { backgroundColor: 'rgba(239,68,68,0.15)' }]}>
-                    <Text style={[styles.dlStatText, { color: '#ef4444' }]}>
+                  <View style={[styles.dlStatBadge, { backgroundColor: 'rgba(225,29,72,0.15)' }]}>
+                    <Text style={[styles.dlStatText, { color: '#e11d48' }]}>
                       ✗ {dlDoneFiles.filter(f => f.status === 'error').length} Hata
                     </Text>
                   </View>
@@ -1284,13 +1709,13 @@ export default function App() {
                         <View style={[
                           styles.dlPlatformTag,
                           item.platform === 'youtube' ? { backgroundColor: 'rgba(239,68,68,0.2)' } :
-                          item.platform === 'tiktok' ? { backgroundColor: 'rgba(0,242,234,0.2)' } :
+                          item.platform === 'tiktok' ? { backgroundColor: 'rgba(225,29,72,0.2)' } :
                           { backgroundColor: 'rgba(225,48,108,0.2)' }
                         ]}>
                           <Text style={[
                             styles.dlPlatformTagText,
                             item.platform === 'youtube' ? { color: '#ef4444' } :
-                            item.platform === 'tiktok' ? { color: '#00f2ea' } :
+                            item.platform === 'tiktok' ? { color: '#e11d48' } :
                             { color: '#e1306c' }
                           ]}>
                             {item.platform === 'youtube' ? 'YT' : item.platform === 'tiktok' ? 'TT' : 'IG'}
@@ -1366,45 +1791,68 @@ export default function App() {
   }
 
   // ============================================
-  // EKRAN 3: DİKEY REELS & TIKTOK MODU (FERAH & TEMİZ HUD)
+  // EKRAN 3: DİKEY REELS & PLAYER (WEB SİTESİ TARZI ÜST BAR & HUD)
   // ============================================
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
-      {/* TEMİZ & FERAH ÜST HUD */}
+      {/* WEB SİTESİ GİBİ ÜST HUD BAR */}
       {uiVisible && (
         <View style={styles.minimalHeader}>
           {/* Sol: Geri / Menü Butonu */}
-          <TouchableOpacity onPress={() => setCurrentMode('menu')} style={styles.hudBackBtn}>
-            <Text style={styles.hudBackText}>Menü</Text>
+          <TouchableOpacity onPress={() => setCurrentMode('menu')} style={styles.hudBackBtn} activeOpacity={0.7}>
+            <Text style={styles.hudBackText}>← Menü</Text>
           </TouchableOpacity>
 
-          {/* Orta: Platform Rozeti (tıkla değiştir) */}
-          <TouchableOpacity 
-            style={styles.hudPlatformBadge} 
-            onPress={() => {
-              const nextMode = currentMode === 'instagram' ? 'tiktok' : 'instagram';
-              const nextList = nextMode === 'instagram' ? igList : ttList;
-              if (nextList.length === 0) {
-                Alert.alert('Bilgi', `${nextMode === 'instagram' ? 'Instagram' : 'TikTok'} videosu bulunamadı.`);
-                return;
-              }
-              const last = lastWatched[nextMode] || 0;
-              setActiveIndex(last < nextList.length ? last : 0);
-              setCurrentMode(nextMode);
-            }}
-            activeOpacity={0.7}
+          {/* Orta: Web Sitesi Tarzı Platform Filtre Çubuğu (Yatay Kaydırılabilir) */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.hudTabsScroll}
+            style={styles.hudTabsContainer}
           >
-            <Text style={styles.hudPlatformText}>
-              {currentMode === 'instagram' ? 'INSTAGRAM' : 'TIKTOK'}
-            </Text>
-          </TouchableOpacity>
+            {[
+              { id: 'all', label: 'TÜMÜ' },
+              { id: 'tiktok', label: 'TIKTOK' },
+              { id: 'x', label: '𝕏 TWITTER' },
+              { id: 'instagram', label: 'INSTAGRAM' },
+              ...(favList.length > 0 ? [{ id: 'favorites', label: '❤️ FAVORİ' }] : []),
+            ].map((tab) => {
+              const isSelected = currentMode === tab.id;
+              return (
+                <TouchableOpacity
+                  key={tab.id}
+                  style={[styles.hudTabBtn, isSelected && styles.hudTabBtnActive]}
+                  onPress={() => {
+                    setCurrentMode(tab.id);
+                    setActiveIndex(0);
+                    pagerRef.current?.setPageWithoutAnimation(0);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.hudTabBtnText, isSelected && styles.hudTabBtnTextActive]}>
+                    {tab.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
 
-          {/* Sağ: Sayaç Rozeti */}
-          <TouchableOpacity style={styles.hudCounterBtn} onPress={() => setShowJumpPrompt(true)}>
-            <Text style={styles.hudCounterText}>{activeIndex + 1} / {currentList.length}</Text>
-          </TouchableOpacity>
+          {/* Sağ Eylemler: Fit Toggle & Sayaç */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <TouchableOpacity
+              style={[styles.hudFitBtn, fitMode === 'cover' && styles.hudFitBtnActive]}
+              onPress={() => setFitMode(prev => prev === 'contain' ? 'cover' : 'contain')}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.hudFitText}>{fitMode === 'cover' ? 'TAM' : 'SIĞ'}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.hudCounterBtn} onPress={() => setShowJumpPrompt(true)}>
+              <Text style={styles.hudCounterText}>{activeIndex + 1}/{currentList.length}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       )}
 
@@ -1435,16 +1883,21 @@ export default function App() {
           }}
         >
           {currentList.map((item, index) => (
-            <View key={item.name + index} style={{ flex: 1 }}>
+            <View key={(item.uri || item.path || item.name) + index} style={{ flex: 1 }}>
               <VideoSlide 
                 item={item} 
                 index={index} 
                 activeIndex={activeIndex} 
                 serverIp={serverIp} 
                 onDelete={deleteVideo}
+                onDownloadSingle={downloadSingleVideo}
                 uiVisible={uiVisible}
                 setUiVisible={setUiVisible}
                 isSwiping={isSwiping}
+                isFavorite={favorites.includes(item.uri || item.path || item.name)}
+                onToggleFavorite={toggleFavorite}
+                fitMode={fitMode}
+                onToggleFit={() => setFitMode(prev => prev === 'contain' ? 'cover' : 'contain')}
               />
             </View>
           ))}
@@ -1495,144 +1948,367 @@ export default function App() {
 // STYLES
 // ============================================
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000' },
+  container: { flex: 1, backgroundColor: '#09090b' },
 
-  // ANA MENÜ DASHBOARD STİLLERİ
+  // ANA MENÜ DASHBOARD STİLLERİ (Web Sitesi Siyah & Kırmızı Teması)
   menuContainer: { flex: 1, paddingTop: 55, paddingHorizontal: 20 },
   menuHeader: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 20 },
-  menuLogo: { width: 50, height: 50, borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
-  menuTitle: { color: '#fff', fontSize: 24, fontWeight: '900', letterSpacing: -0.5 },
-  menuSubtitle: { color: '#888', fontSize: 13 },
+  menuLogo: { width: 50, height: 50, borderRadius: 16, borderWidth: 1, borderColor: 'rgba(225, 29, 72, 0.4)' },
+  menuTitle: { color: '#ffffff', fontSize: 24, fontWeight: '900', letterSpacing: -0.5 },
+  menuSubtitle: { color: '#a1a1aa', fontSize: 13, marginTop: 1 },
+  headerProBadge: {
+    backgroundColor: '#e11d48',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  headerProText: { color: '#ffffff', fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
 
-  ipBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 16, padding: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', marginBottom: 20 },
-  ipLabel: { color: '#888', fontSize: 11, marginBottom: 2, fontWeight: '600' },
-  ipInput: { color: '#fff', fontSize: 16, fontWeight: 'bold', padding: 0 },
-  ipScanBtn: { backgroundColor: 'rgba(0, 242, 234, 0.15)', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(0, 242, 234, 0.4)', marginRight: 8 },
-  ipScanText: { color: '#00f2ea', fontWeight: 'bold', fontSize: 12 },
-  ipConnectBtn: { backgroundColor: '#3b82f6', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12 },
-  ipConnectText: { color: '#fff', fontWeight: 'bold', fontSize: 13 },
+  // IP Bağlantı Çubuğu (Glassmorphism Koyu Kırmızı Vurgu)
+  ipBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(18, 18, 23, 0.85)',
+    borderRadius: 16,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    marginBottom: 20,
+  },
+  ipLabel: { color: '#a1a1aa', fontSize: 10, marginBottom: 2, fontWeight: '700', letterSpacing: 0.5 },
+  ipInput: { color: '#ffffff', fontSize: 15, fontWeight: 'bold', padding: 0 },
+  ipScanBtn: {
+    backgroundColor: 'rgba(225, 29, 72, 0.15)',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(225, 29, 72, 0.35)',
+    marginRight: 8,
+  },
+  ipScanText: { color: '#e11d48', fontWeight: '800', fontSize: 11, letterSpacing: 0.5 },
+  ipConnectBtn: {
+    backgroundColor: '#e11d48',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  ipConnectText: { color: '#ffffff', fontWeight: '800', fontSize: 12, letterSpacing: 0.5 },
 
-  sectionHeaderTitle: { color: '#aaa', fontSize: 13, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 12 },
+  sectionHeaderTitle: {
+    color: '#71717a',
+    fontSize: 12,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: 12,
+  },
 
-  // MOD KARTLARI
-  modeCard: { borderRadius: 20, borderWidth: 1.5, overflow: 'hidden', minHeight: 95 },
+  // MOD KARTLARI (Siyah & Kırmızı Web Teması)
+  modeCard: {
+    borderRadius: 20,
+    borderWidth: 1,
+    overflow: 'hidden',
+    minHeight: 90,
+    backgroundColor: '#121217',
+  },
   modeCardContent: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 14 },
   modeIconCircle: { width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
-  modeCardTitle: { color: '#fff', fontSize: 18, fontWeight: '800' },
-  modeCardDesc: { color: '#999', fontSize: 12, marginTop: 2 },
-  modeCardBadge: { alignSelf: 'flex-start', color: '#ff5e62', backgroundColor: 'rgba(255,94,98,0.15)', fontSize: 11, fontWeight: 'bold', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, marginTop: 8 },
-  modeArrow: { color: '#555', fontSize: 28, fontWeight: '300', marginLeft: 6 },
+  modeCardTitle: { color: '#ffffff', fontSize: 17, fontWeight: '800', letterSpacing: -0.3 },
+  modeCardDesc: { color: '#a1a1aa', fontSize: 12, marginTop: 2 },
+  modeCardBadge: {
+    alignSelf: 'flex-start',
+    fontSize: 11,
+    fontWeight: 'bold',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    marginTop: 8,
+  },
+  modeArrow: { color: '#52525b', fontSize: 24, fontWeight: '300', marginLeft: 6 },
 
-  quickDownloadBtn: { backgroundColor: '#00f2ea', borderRadius: 16, padding: 16, alignItems: 'center', marginTop: 10 },
-  quickDownloadText: { color: '#000', fontWeight: '900', fontSize: 14 },
-  folderSelectBtn: { backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 14, padding: 14, alignItems: 'center', marginTop: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
-  folderSelectText: { color: '#fff', fontWeight: 'bold', fontSize: 13 },
-  folderPathText: { color: '#888', fontSize: 11, marginTop: 4 },
+  quickDownloadBtn: {
+    backgroundColor: '#e11d48',
+    borderRadius: 16,
+    padding: 16,
+    alignItems: 'center',
+    marginTop: 10,
+    shadowColor: '#e11d48',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  quickDownloadText: { color: '#ffffff', fontWeight: '900', fontSize: 14, letterSpacing: 0.3 },
+  folderSelectBtn: {
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderRadius: 14,
+    padding: 14,
+    alignItems: 'center',
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  folderSelectText: { color: '#e4e4e7', fontWeight: 'bold', fontSize: 13 },
+  folderPathText: { color: '#71717a', fontSize: 11, marginTop: 4 },
   deleteOfflineBtn: { alignItems: 'center', padding: 14, marginTop: 6 },
 
-  // MİNİMAL REELS HUD (SIĞMA PROBLEMİ OLMAYAN)
-  minimalHeader: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 50, paddingTop: 50, paddingHorizontal: 16, paddingBottom: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  hudBackBtn: { backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
-  hudBackText: { color: '#fff', fontWeight: 'bold', fontSize: 13 },
-  hudPlatformBadge: { backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
-  hudPlatformText: { color: '#00f2ea', fontWeight: '800', fontSize: 12, letterSpacing: 0.5 },
-  hudCounterBtn: { backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
-  hudCounterText: { color: '#fff', fontWeight: 'bold', fontSize: 13 },
+  // MİNİMAL REELS HUD (WEB SİTESİ TARZI ÜST BAR)
+  minimalHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 50,
+    paddingTop: 50,
+    paddingHorizontal: 12,
+    paddingBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(9, 9, 11, 0.75)',
+  },
+  hudBackBtn: {
+    backgroundColor: 'rgba(18, 18, 23, 0.85)',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  hudBackText: { color: '#ffffff', fontWeight: 'bold', fontSize: 12 },
+
+  hudTabsContainer: { flex: 1, marginHorizontal: 8 },
+  hudTabsScroll: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 2 },
+  hudTabBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  hudTabBtnActive: {
+    backgroundColor: '#e11d48',
+    borderColor: '#e11d48',
+  },
+  hudTabBtnText: { color: '#a1a1aa', fontWeight: '700', fontSize: 11 },
+  hudTabBtnTextActive: { color: '#ffffff', fontWeight: '900' },
+
+  hudFitBtn: {
+    backgroundColor: 'rgba(18, 18, 23, 0.85)',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  hudFitBtnActive: {
+    backgroundColor: 'rgba(225, 29, 72, 0.3)',
+    borderColor: '#e11d48',
+  },
+  hudFitText: { color: '#ffffff', fontWeight: 'bold', fontSize: 11 },
+
+  hudCounterBtn: {
+    backgroundColor: 'rgba(18, 18, 23, 0.85)',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  hudCounterText: { color: '#ffffff', fontWeight: 'bold', fontSize: 12 },
 
   // VIDEO VE KONTROLLER
   videoContainer: { flex: 1, backgroundColor: '#000', overflow: 'hidden' },
   video: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   gradientOverlay: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0 },
-  pauseIconContainer: { position: 'absolute', top: '50%', left: '50%', marginTop: -25, marginLeft: -75, width: 150, height: 50, borderRadius: 25, backgroundColor: 'rgba(0,0,0,0.7)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
-  pauseIconText: { color: '#fff', fontSize: 13, fontWeight: 'bold', letterSpacing: 1 },
-  speedUpOverlay: { position: 'absolute', top: 120, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.7)', paddingHorizontal: 18, paddingVertical: 8, borderRadius: 20 },
-  speedUpText: { color: '#00f2ea', fontWeight: 'bold', fontSize: 15 },
 
-  sideActions: { position: 'absolute', right: 14, bottom: 155, zIndex: 35, gap: 14 },
+  // Web Sitesi Gibi Merkez Flash İkon
+  centerFlashBadge: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    marginTop: -40,
+    marginLeft: -40,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(9, 9, 11, 0.75)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(225, 29, 72, 0.5)',
+  },
+  centerFlashIcon: { color: '#ffffff', fontSize: 32, fontWeight: 'bold' },
+
+  speedUpOverlay: {
+    position: 'absolute',
+    top: 120,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(9, 9, 11, 0.85)',
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(225, 29, 72, 0.4)',
+  },
+  speedUpText: { color: '#e11d48', fontWeight: '900', fontSize: 14 },
+
+  // Sağ Yan Eylemler (Web Tarzı Glassmorphism Sütun)
+  sideActions: { position: 'absolute', right: 14, bottom: 155, zIndex: 35, gap: 12 },
   sideBtn: { alignItems: 'center' },
-  iconCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
-  actionBtnLabel: { color: '#fff', fontSize: 11, fontWeight: '800' },
+  iconCircle: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: 'rgba(18, 18, 23, 0.75)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  iconCircleActive: {
+    backgroundColor: '#e11d48',
+    borderColor: '#e11d48',
+  },
+  iconCircleHeart: {
+    backgroundColor: 'rgba(225, 29, 72, 0.25)',
+    borderColor: '#e11d48',
+  },
+  actionBtnLabel: { color: '#ffffff', fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
 
+  // Alt Bilgi & Rozetler
   videoInfo: { position: 'absolute', bottom: 85, left: 16, right: 80, zIndex: 25 },
-  badge: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 8 },
-  badgeLocal: { backgroundColor: '#10b981' },
-  badgeServer: { backgroundColor: '#3b82f6' },
-  badgeText: { color: '#fff', fontSize: 11, fontWeight: 'bold' },
-  videoName: { color: '#fff', fontSize: 14, fontWeight: '700', textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: {width: 1, height: 1}, textShadowRadius: 3 },
+  badge: { alignSelf: 'flex-start', paddingHorizontal: 9, paddingVertical: 3, borderRadius: 7 },
+  badgePlatform: { backgroundColor: 'rgba(225, 29, 72, 0.2)', borderWidth: 1, borderColor: 'rgba(225, 29, 72, 0.4)' },
+  badgePlatformText: { color: '#e11d48', fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
+  badgeLocal: { backgroundColor: 'rgba(16, 185, 129, 0.2)', borderWidth: 1, borderColor: 'rgba(16, 185, 129, 0.4)' },
+  badgeServer: { backgroundColor: 'rgba(255, 255, 255, 0.1)', borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.15)' },
+  badgeText: { color: '#ffffff', fontSize: 10, fontWeight: 'bold' },
+  badgeUploader: { backgroundColor: 'rgba(255, 255, 255, 0.08)' },
+  badgeUploaderText: { color: '#a1a1aa', fontSize: 10, fontWeight: '600' },
+  videoName: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '700',
+    lineHeight: 18,
+    textShadowColor: 'rgba(0,0,0,0.85)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 3,
+  },
 
-  scrubberContainer: { position: 'absolute', bottom: 35, left: 14, right: 14, flexDirection: 'row', alignItems: 'center', zIndex: 30 },
-  slider: { flex: 1, marginHorizontal: 8, height: 35 },
-  timeText: { color: '#ddd', fontSize: 11, fontWeight: 'bold', width: 40, textAlign: 'center' },
+  // Web Tarzı Alt Scrubber & 5s Butonları
+  scrubberContainer: {
+    position: 'absolute',
+    bottom: 35,
+    left: 12,
+    right: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    zIndex: 30,
+    backgroundColor: 'rgba(9, 9, 11, 0.65)',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  playPauseScrubberBtn: {
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: 'rgba(225, 29, 72, 0.25)',
+    borderWidth: 1,
+    borderColor: '#e11d48',
+    marginRight: 4,
+  },
+  playPauseScrubberIcon: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+  skipBtnSmall: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  skipBtnText: { color: '#e4e4e7', fontSize: 10, fontWeight: '900' },
+  slider: { flex: 1, marginHorizontal: 6, height: 35 },
+  timeText: { color: '#e4e4e7', fontSize: 10, fontWeight: 'bold', minWidth: 36, textAlign: 'center' },
 
-  // YOUTUBE HUB STİLLERİ
-  ytHubContainer: { flex: 1, backgroundColor: '#090a0f', paddingTop: 50 },
+  // YOUTUBE HUB STİLLERİ (Web Sitesi Siyah & Kırmızı)
+  ytHubContainer: { flex: 1, backgroundColor: '#09090b', paddingTop: 50 },
   ytHeaderBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 14 },
-  ytBackBtn: { backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14 },
-  ytBackBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 13 },
-  ytHeaderTitle: { color: '#fff', fontSize: 16, fontWeight: '800' },
-  ytCountBadge: { backgroundColor: '#ef4444', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
-  ytCountText: { color: '#fff', fontSize: 11, fontWeight: 'bold' },
+  ytBackBtn: { backgroundColor: 'rgba(255, 255, 255, 0.08)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+  ytBackBtnText: { color: '#ffffff', fontWeight: 'bold', fontSize: 13 },
+  ytHeaderTitle: { color: '#ffffff', fontSize: 16, fontWeight: '800' },
+  ytCountBadge: { backgroundColor: '#e11d48', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
+  ytCountText: { color: '#ffffff', fontSize: 11, fontWeight: 'bold' },
 
-  ytPlayerSection: { backgroundColor: '#000', borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.1)' },
+  ytPlayerSection: { backgroundColor: '#000', borderBottomWidth: 1, borderBottomColor: 'rgba(255, 255, 255, 0.1)' },
   ytVideoWrapper: { width: '100%', height: width * (9 / 16), backgroundColor: '#000', position: 'relative' },
   ytVideoView: { width: '100%', height: '100%' },
   ytVideoTouchArea: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center', zIndex: 5 },
-  ytBigPlayBadge: { width: 64, height: 64, borderRadius: 32, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
-  ytBigPlayIcon: { color: '#fff', fontSize: 26, fontWeight: 'bold' },
-  ytFloatingFullscreenBtn: { position: 'absolute', bottom: 8, right: 8, zIndex: 10, backgroundColor: 'rgba(0,0,0,0.7)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
-  ytFloatingFullscreenText: { color: '#fff', fontSize: 11, fontWeight: 'bold' },
+  ytBigPlayBadge: { width: 64, height: 64, borderRadius: 32, backgroundColor: 'rgba(9, 9, 11, 0.75)', justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: '#e11d48' },
+  ytBigPlayIcon: { color: '#ffffff', fontSize: 26, fontWeight: 'bold' },
+  ytFloatingFullscreenBtn: { position: 'absolute', bottom: 8, right: 8, zIndex: 10, backgroundColor: 'rgba(9, 9, 11, 0.8)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.15)' },
+  ytFloatingFullscreenText: { color: '#ffffff', fontSize: 11, fontWeight: 'bold' },
 
-  // Kontrol Deck (Videonun Altında - Asla Arkada Kalmaz)
-  ytControlsDeck: { backgroundColor: '#12131c', paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)' },
+  // Kontrol Deck
+  ytControlsDeck: { backgroundColor: '#121217', paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: 'rgba(255, 255, 255, 0.08)' },
   ytTimelineDeckRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
-  ytTimeDeckText: { color: '#aaa', fontSize: 11, fontWeight: 'bold', minWidth: 38, textAlign: 'center' },
+  ytTimeDeckText: { color: '#a1a1aa', fontSize: 11, fontWeight: 'bold', minWidth: 38, textAlign: 'center' },
   ytSliderDeck: { flex: 1, height: 32 },
   ytButtonsDeckRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, flexWrap: 'wrap' },
-  ytDeckBtn: { backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
-  ytDeckBtnText: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
-  ytDeckPlayBtn: { backgroundColor: '#ef4444', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 10, elevation: 3 },
-  ytDeckPlayText: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
-  ytDeckSpeedBtn: { backgroundColor: 'rgba(255,165,0,0.2)', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,165,0,0.3)' },
-  ytDeckSpeedText: { color: '#ffa500', fontSize: 11, fontWeight: 'bold' },
-  ytDeckFullscreenBtn: { backgroundColor: 'rgba(59,130,246,0.2)', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(59,130,246,0.3)' },
-  ytDeckFullscreenText: { color: '#3b82f6', fontSize: 11, fontWeight: 'bold' },
+  ytDeckBtn: { backgroundColor: 'rgba(255, 255, 255, 0.06)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.08)' },
+  ytDeckBtnText: { color: '#ffffff', fontSize: 12, fontWeight: 'bold' },
+  ytDeckPlayBtn: { backgroundColor: '#e11d48', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 10, elevation: 3 },
+  ytDeckPlayText: { color: '#ffffff', fontSize: 12, fontWeight: 'bold' },
+  ytDeckSpeedBtn: { backgroundColor: 'rgba(225, 29, 72, 0.15)', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(225, 29, 72, 0.3)' },
+  ytDeckSpeedText: { color: '#e11d48', fontSize: 11, fontWeight: 'bold' },
+  ytDeckFullscreenBtn: { backgroundColor: 'rgba(255, 255, 255, 0.08)', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.12)' },
+  ytDeckFullscreenText: { color: '#ffffff', fontSize: 11, fontWeight: 'bold' },
 
-  ytPlayerMeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12, backgroundColor: '#12131c' },
-  ytActiveTitle: { color: '#fff', fontSize: 13, fontWeight: 'bold' },
-  ytActiveSub: { color: '#777', fontSize: 11, marginTop: 3 },
-  ytNoSelection: { width: '100%', height: 160, justifyContent: 'center', alignItems: 'center', backgroundColor: '#12131c' },
+  ytPlayerMeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12, backgroundColor: '#121217' },
+  ytActiveTitle: { color: '#ffffff', fontSize: 13, fontWeight: 'bold' },
+  ytActiveSub: { color: '#71717a', fontSize: 11, marginTop: 3 },
+  ytNoSelection: { width: '100%', height: 160, justifyContent: 'center', alignItems: 'center', backgroundColor: '#121217' },
 
   ytScrollView: { flex: 1 },
   ytScrollContent: { padding: 14, gap: 10, paddingBottom: 40 },
-  ytCard: { flexDirection: 'row', backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', overflow: 'hidden', padding: 8, gap: 10 },
-  ytCardActive: { borderColor: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.1)' },
-  ytThumbnailBox: { width: 110, height: 68, borderRadius: 8, overflow: 'hidden', justifyContent: 'center', alignItems: 'center', backgroundColor: '#181822' },
-  ytPlayIconBadge: { width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(239, 68, 68, 0.9)', justifyContent: 'center', alignItems: 'center', paddingLeft: 2 },
-  ytBadgeDuration: { position: 'absolute', bottom: 3, right: 3, backgroundColor: 'rgba(0,0,0,0.8)', paddingHorizontal: 4, paddingVertical: 1, borderRadius: 3 },
+  ytCard: { flexDirection: 'row', backgroundColor: '#121217', borderRadius: 14, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.08)', overflow: 'hidden', padding: 8, gap: 10 },
+  ytCardActive: { borderColor: '#e11d48', backgroundColor: 'rgba(225, 29, 72, 0.1)' },
+  ytThumbnailBox: { width: 110, height: 68, borderRadius: 8, overflow: 'hidden', justifyContent: 'center', alignItems: 'center', backgroundColor: '#181820' },
+  ytPlayIconBadge: { width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(225, 29, 72, 0.9)', justifyContent: 'center', alignItems: 'center', paddingLeft: 2 },
+  ytBadgeDuration: { position: 'absolute', bottom: 3, right: 3, backgroundColor: 'rgba(0,0,0,0.85)', paddingHorizontal: 4, paddingVertical: 1, borderRadius: 3 },
   ytCardDetails: { flex: 1, justifyContent: 'space-between', paddingVertical: 2 },
-  ytCardTitle: { color: '#eee', fontSize: 12, fontWeight: '600', lineHeight: 16 },
+  ytCardTitle: { color: '#f4f4f5', fontSize: 12, fontWeight: '600', lineHeight: 16 },
   ytCardMetaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 },
-  ytCardSize: { color: '#666', fontSize: 10 },
-  ytNowPlayingBadge: { backgroundColor: '#ef4444', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
-  ytNowPlayingText: { color: '#fff', fontSize: 9, fontWeight: 'bold' },
+  ytCardSize: { color: '#71717a', fontSize: 10 },
+  ytNowPlayingBadge: { backgroundColor: '#e11d48', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  ytNowPlayingText: { color: '#ffffff', fontSize: 9, fontWeight: 'bold' },
 
   // MODAL & JUMP
-  jumpOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.75)', zIndex: 100, justifyContent: 'center', alignItems: 'center' },
-  jumpBox: { backgroundColor: '#181924', padding: 22, borderRadius: 20, width: '80%', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
-  jumpTitle: { color: '#fff', fontSize: 16, fontWeight: 'bold', marginBottom: 15 },
-  jumpInput: { backgroundColor: 'rgba(255,255,255,0.08)', color: '#fff', width: '100%', padding: 12, borderRadius: 12, textAlign: 'center', fontSize: 18, marginBottom: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
+  jumpOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(9, 9, 11, 0.85)', zIndex: 100, justifyContent: 'center', alignItems: 'center' },
+  jumpBox: { backgroundColor: '#121217', padding: 22, borderRadius: 20, width: '82%', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(225, 29, 72, 0.3)' },
+  jumpTitle: { color: '#ffffff', fontSize: 16, fontWeight: 'bold', marginBottom: 15 },
+  jumpInput: { backgroundColor: 'rgba(255, 255, 255, 0.06)', color: '#ffffff', width: '100%', padding: 12, borderRadius: 12, textAlign: 'center', fontSize: 18, marginBottom: 20, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.12)' },
   jumpButtons: { flexDirection: 'row', width: '100%', justifyContent: 'space-between', gap: 10 },
-  jumpBtnCancel: { flex: 1, backgroundColor: 'rgba(255,255,255,0.1)', padding: 12, borderRadius: 12, alignItems: 'center' },
-  jumpBtnGo: { flex: 1, backgroundColor: '#00f2ea', padding: 12, borderRadius: 12, alignItems: 'center' },
-  jumpBtnText: { color: '#000', fontWeight: 'bold', fontSize: 14 },
+  jumpBtnCancel: { flex: 1, backgroundColor: 'rgba(255, 255, 255, 0.08)', padding: 12, borderRadius: 12, alignItems: 'center' },
+  jumpBtnGo: { flex: 1, backgroundColor: '#e11d48', padding: 12, borderRadius: 12, alignItems: 'center' },
+  jumpBtnText: { color: '#ffffff', fontWeight: 'bold', fontSize: 14 },
 
   emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
-  emptyTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+  emptyTitle: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
+  connectBtn: { backgroundColor: '#e11d48', paddingHorizontal: 18, paddingVertical: 10, borderRadius: 12 },
+  connectBtnText: { color: '#ffffff', fontWeight: 'bold', fontSize: 13 },
 
   // İNDİRME MODALI STİLLERİ
   dlModalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.82)',
+    backgroundColor: 'rgba(9, 9, 11, 0.88)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 18,
@@ -1640,11 +2316,11 @@ const styles = StyleSheet.create({
   dlModalCard: {
     width: '100%',
     maxHeight: '85%',
-    backgroundColor: '#161824',
+    backgroundColor: '#121217',
     borderRadius: 24,
     padding: 20,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
+    borderColor: 'rgba(225, 29, 72, 0.25)',
     elevation: 12,
   },
   dlModalHeader: {
@@ -1654,12 +2330,12 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   dlModalTitle: {
-    color: '#fff',
+    color: '#ffffff',
     fontSize: 16,
     fontWeight: 'bold',
   },
   dlModalSubtitle: {
-    color: '#8b8e9f',
+    color: '#a1a1aa',
     fontSize: 12,
     marginTop: 2,
   },
@@ -1667,12 +2343,12 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   dlCloseBtnText: {
-    color: '#fff',
+    color: '#ffffff',
     fontSize: 14,
     fontWeight: 'bold',
   },
@@ -1685,17 +2361,17 @@ const styles = StyleSheet.create({
   dlProgressBarBg: {
     flex: 1,
     height: 8,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
     borderRadius: 4,
     overflow: 'hidden',
   },
   dlProgressBarFill: {
     height: '100%',
-    backgroundColor: '#00f2ea',
+    backgroundColor: '#e11d48',
     borderRadius: 4,
   },
   dlPercentText: {
-    color: '#00f2ea',
+    color: '#e11d48',
     fontSize: 13,
     fontWeight: 'bold',
     minWidth: 40,
@@ -1704,17 +2380,17 @@ const styles = StyleSheet.create({
   dlCurrentFileBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderRadius: 12,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: 'rgba(255, 255, 255, 0.08)',
   },
   dlCurrentFileName: {
     flex: 1,
-    color: '#fff',
+    color: '#ffffff',
     fontSize: 12,
     fontWeight: '600',
   },
@@ -1736,9 +2412,9 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   dlListTitle: {
-    color: '#aaa',
-    fontSize: 12,
-    fontWeight: '700',
+    color: '#71717a',
+    fontSize: 11,
+    fontWeight: '800',
     marginBottom: 6,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -1748,7 +2424,7 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   dlEmptyListText: {
-    color: '#666',
+    color: '#71717a',
     fontSize: 12,
     fontStyle: 'italic',
     textAlign: 'center',
@@ -1757,7 +2433,7 @@ const styles = StyleSheet.create({
   dlFileRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.03)',
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
     paddingHorizontal: 10,
     paddingVertical: 7,
     borderRadius: 8,
@@ -1774,7 +2450,7 @@ const styles = StyleSheet.create({
   },
   dlRowFileName: {
     flex: 1,
-    color: '#ddd',
+    color: '#e4e4e7',
     fontSize: 11,
   },
   dlRowStatus: {
@@ -1788,39 +2464,39 @@ const styles = StyleSheet.create({
   },
   dlCancelBtn: {
     flex: 2,
-    backgroundColor: 'rgba(239,68,68,0.2)',
+    backgroundColor: 'rgba(225, 29, 72, 0.15)',
     borderWidth: 1,
-    borderColor: 'rgba(239,68,68,0.5)',
+    borderColor: 'rgba(225, 29, 72, 0.4)',
     paddingVertical: 12,
     borderRadius: 12,
     alignItems: 'center',
   },
   dlCancelBtnText: {
-    color: '#ef4444',
+    color: '#e11d48',
     fontSize: 13,
     fontWeight: 'bold',
   },
   dlMinimizeBtn: {
     flex: 1,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
     paddingVertical: 12,
     borderRadius: 12,
     alignItems: 'center',
   },
   dlMinimizeBtnText: {
-    color: '#fff',
+    color: '#ffffff',
     fontSize: 13,
     fontWeight: '600',
   },
   dlFinishBtn: {
     flex: 1,
-    backgroundColor: '#00f2ea',
+    backgroundColor: '#e11d48',
     paddingVertical: 12,
     borderRadius: 12,
     alignItems: 'center',
   },
   dlFinishBtnText: {
-    color: '#000',
+    color: '#ffffff',
     fontSize: 14,
     fontWeight: 'bold',
   },
