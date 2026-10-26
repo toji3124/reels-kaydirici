@@ -21,11 +21,8 @@ jobs:
         with:
           node-version: 22
 
-      - name: Setup Java
-        uses: actions/setup-java@v3
-        with:
-          distribution: temurin
-          java-version: 17
+      - name: Install jq for JSON parsing
+        run: sudo apt-get update && sudo apt-get install -y jq
 
       - name: Setup Expo and EAS
         uses: expo/expo-github-action@v8
@@ -39,16 +36,15 @@ jobs:
         working-directory: mobile
         run: npm install
 
-      - name: Generate native projects
+      - name: Build APK with EAS
         working-directory: mobile
-        run: npx expo prebuild --platform android --clean
+        run: eas build --platform android --profile preview --non-interactive --wait
 
-      - name: Build APK with Gradle
-        working-directory: mobile/android
-        run: ./gradlew assembleRelease --no-daemon
-
-      - name: Copy APK to root
-        run: cp mobile/android/app/build/outputs/apk/release/app-release.apk ./reels-kaydirici.apk
+      - name: Download APK
+        working-directory: mobile
+        run: |
+          BUILD_ID=$(eas build:list --platform android --limit 1 --json --non-interactive | jq -r '.[0].id')
+          eas build:download --id $BUILD_ID --output ../reels-kaydirici.apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
