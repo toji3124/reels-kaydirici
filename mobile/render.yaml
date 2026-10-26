@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: video-pro-downloader
+    runtime: docker
+    plan: free
+    region: frankfurt
+    autoDeploy: true

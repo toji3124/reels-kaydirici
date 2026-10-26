@@ -1,0 +1,12 @@
+node_modules/
+video-downloader-interface-redesign/node_modules/
+video-downloader-interface-redesign/.next/
+downloads/*.mp4
+downloads/*/*.mp4
+thumbnails/*.jpg
+cookies.txt
+*.log
+logs_*/
+yt-dlp.exe
+ffmpeg.exe
+ffprobe.exe

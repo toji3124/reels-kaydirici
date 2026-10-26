@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Downloader Pro</title>
+    <meta name="description" content="Instagram Reels, TikTok ve YouTube videolarını toplu indir">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Animated background -->
+    <div class="bg-animation">
+        <div class="bg-orb bg-orb-1"></div>
+        <div class="bg-orb bg-orb-2"></div>
+        <div class="bg-orb bg-orb-3"></div>
+    </div>
+
+    <div class="container">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="sidebar-logo">
+                <h1>VIDEO PRO</h1>
+                <p>Download Manager</p>
+            </div>
+
+            <div class="sidebar-platforms">
+                <div class="platform-mini-badge">
+                    <span class="platform-mini-dot ig"></span>
+                    <span>IG</span>
+                </div>
+                <div class="platform-mini-badge">
+                    <span class="platform-mini-dot tt"></span>
+                    <span>TT</span>
+                </div>
+                <div class="platform-mini-badge">
+                    <span class="platform-mini-dot yt"></span>
+                    <span>YT</span>
+                </div>
+            </div>
+
+            <nav class="sidebar-nav">
+                <button class="sidebar-tab active" data-tab="manual" id="tabManual">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
+                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                    </svg>
+                    URL Downloader
+                </button>
+                
+                <button class="sidebar-tab" data-tab="profile" id="tabProfile">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="12" cy="7" r="4"></circle>
+                    </svg>
+                    Profile Crawler
+                </button>
+                
+                <button class="sidebar-tab" data-tab="explore" id="tabExplore">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                    Explore Mode
+                    <span class="sidebar-badge" id="exploreLiveBadge" style="display:none;">LIVE</span>
+                </button>
+                
+                <button class="sidebar-tab" data-tab="collected" id="tabCollected">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
+                        <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                    Link Pool
+                    <span class="sidebar-badge" id="collectedBadge" style="display:none;">0</span>
+                </button>
+                
+                <button class="sidebar-tab" data-tab="downloaded" id="tabDownloaded">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="7 10 12 15 17 10"></polyline>
+                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                    </svg>
+                    Archive
+                </button>
+                
+                <button class="sidebar-tab" data-tab="twitter" id="tabTwitter">
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+                        <path d="M23 3a10.9 10.9 0 0 1-3.14 1.53 4.48 4.48 0 0 0-7.86 3v1A10.66 10.66 0 0 1 3 4s-4 9 5 13a11.64 11.64 0 0 1-7 2c9 5 20 0 20-11.5a4.5 4.5 0 0 0-.08-.83A7.72 7.72 0 0 0 23 3z"></path>
+                    </svg>
+                    Twitter Viewer
+                </button>
+
+                <button class="sidebar-tab" data-tab="favorites" id="tabFavorites">
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" style="color: #ef4444;">
+                        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                    </svg>
+                    Favorites
+                    <span class="sidebar-badge" id="favoritesBadge" style="display:none; background: rgba(239,68,68,0.25); color: #ef4444;">0</span>
+                </button>
+            </nav>
+
+            <div class="sidebar-actions">
+                <button id="showCookieBtn" class="btn btn-sm btn-secondary">
+                    Cookie Settings
+                </button>
+                <button id="showQrBtn" class="btn btn-sm btn-accent">
+                    QR Connect
+                </button>
+                <a href="/player.html" class="btn btn-sm btn-primary">
+                    Video Player
+                </a>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Manual Download Tab -->
+            <section class="tab-content active" id="panelManual">
+                <header class="main-header">
+                    <h2>URL Downloader</h2>
+                    <div class="header-actions">
+                        <button class="btn btn-sm btn-secondary" id="pasteBtn">
+                            Paste Links
+                        </button>
+                    </div>
+                </header>
+
+                <div class="tab-content-section">
+                    <div class="glass-card">
+                        <div class="card-header">
+                            <div class="card-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                                </svg>
+                            </div>
+                            <div>
+                                <h2>Bulk URL Import</h2>
+                                <p>Paste Instagram Reels, TikTok or YouTube video URLs</p>
+                            </div>
+                        </div>
+
+                        <div class="textarea-wrapper">
+                            <textarea id="linksInput" placeholder="https://www.youtube.com/watch?v=1tSrULuaDIo&#10;https://www.instagram.com/reel/ABC123...&#10;https://www.tiktok.com/@user/video/123456..." spellcheck="false"></textarea>
+                            <div class="textarea-counter">
+                                <span id="linkCount">0</span> / 1000 links
+                            </div>
+                        </div>
+
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem;">
+                            <div style="display: flex; gap: 10px;">
+                                <button class="btn btn-secondary" id="clearBtn">
+                                    Clear
+                                </button>
+                            </div>
+                            
+                            <div style="display: flex; align-items: center; gap: 15px;">
+                                <div style="display: flex; align-items: center; gap: 8px; color: var(--text-muted); font-size: 14px;">
+                                    Parallel: 
+                                    <input type="number" id="parallelLimitInput" value="25" min="1" max="50" style="width: 50px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); color: white; border-radius: 0; padding: 4px; text-align: center;">
+                                </div>
+                                <button class="btn btn-danger" id="cancelBtn" style="display:none;">
+                                    Cancel
+                                </button>
+                                <button class="btn btn-primary" id="processBtn">
+                                    Start Download
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Progress Section -->
+                <div class="tab-content-section">
+                    <div class="progress-section" id="progressSection" style="display:none;">
+                        <div class="glass-card">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                                <span class="progress-label" id="progressLabel">Processing...</span>
+                                <span class="progress-percentage" id="progressPercentage">0%</span>
+                            </div>
+                            <div class="progress-bar-track">
+                                <div class="progress-bar-fill" id="progressBar"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Results Section -->
+                    <div class="results-section" id="resultsSection" style="display:none;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                            <h3 style="font-size: 1.1rem; font-weight: 800; color: #fff;">
+                                Download Results
+                            </h3>
+                            <div style="display: flex; gap: 10px;">
+                                <span class="stat stat-success" id="successCount" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); padding: 4px 12px; border-radius: 0; font-size: 12px; font-weight: bold;">0 success</span>
+                                <span class="stat stat-fail" id="failCount" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); padding: 4px 12px; border-radius: 0; font-size: 12px; font-weight: bold;">0 failed</span>
+                            </div>
+                        </div>
+                        <div class="results-grid" id="resultsGrid"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Profile Crawler Tab -->
+            <section class="tab-content" id="panelProfile">
+                <header class="main-header">
+                    <h2>Profile Crawler</h2>
+                </header>
+
+                <div class="tab-content-section">
+                    <div class="glass-card">
+                        <div class="card-header">
+                            <div class="card-icon" style="background: linear-gradient(135deg, #ef4444, #dc2626);">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                                    <circle cx="12" cy="7" r="4"></circle>
+                                </svg>
+                            </div>
+                            <div>
+                                <h2>Extract Profile Videos</h2>
+                                <p>Import all videos from Instagram, TikTok or YouTube profile</p>
+                            </div>
+                        </div>
+
+                        <div style="display: flex; gap: 10px; margin-bottom: 1.5rem; flex-wrap: wrap;">
+                            <input type="text" id="profileInput" placeholder="https://www.instagram.com/mrbeast/ or @mrbeast or YouTube channel link" style="flex: 1; min-width: 280px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 0; color: white; padding: 10px 14px; font-size: 14px;">
+                            <select id="profileLimit" style="background: #1e1e2d; border: 1px solid rgba(255,255,255,0.15); border-radius: 0; color: white; padding: 10px 14px; font-size: 14px; cursor: pointer;">
+                                <option value="20">Last 20 Videos</option>
+                                <option value="50" selected>Last 50 Videos</option>
+                                <option value="100">Last 100 Videos</option>
+                                <option value="200">Last 200 Videos</option>
+                                <option value="300">Last 300 Videos</option>
+                            </select>
+                            <button class="btn btn-primary" id="fetchProfileBtn">
+                                Fetch Videos
+                            </button>
+                        </div>
+
+                        <div id="profileResultsSection" style="display: none; margin-top: 1.5rem;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                                <div>
+                                    <strong id="profileTitleText" style="font-size: 1rem; color: white;"></strong>
+                                    <span id="profileVideoCountBadge" style="font-size: 0.9rem; color: #10b981; margin-left: 0.5rem;"></span>
+                                </div>
+                                <button class="btn btn-success btn-sm" id="downloadAllProfileVideosBtn">
+                                    Download All
+                                </button>
+                            </div>
+                            <div id="profileVideosList" style="max-height: 350px; overflow-y: auto; background: rgba(0,0,0,0.2); padding: 10px;"></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Explore Mode Tab -->
+            <section class="tab-content" id="panelExplore">
+                <header class="main-header">
+                    <h2>Explore Mode</h2>
+                </header>
+
+                <div class="tab-content-section">
+                    <div class="glass-card">
+                        <div class="card-header">
+                            <div class="card-icon" style="background: linear-gradient(135deg, #ef4444, #dc2626);">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="11" cy="11" r="8"></circle>
+                                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                </svg>
+                            </div>
+                            <div>
+                                <h2>Auto Content Crawler</h2>
+                                <p>TikTok For You Page or Instagram Reels auto-scraping</p>
+                            </div>
+                        </div>
+
+                        <div style="background: rgba(0,0,0,0.25); padding: 1.5rem; margin-bottom: 1.5rem; border: 1px solid rgba(255,255,255,0.08);">
+                            <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-bottom: 1rem;">
+                                <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                                    <label style="font-size: 0.9rem; color: #aaa; font-weight: 500;">Platform</label>
+                                    <select id="explorePlatformSelect" style="background: #1e1e2d; border: 1px solid rgba(239,68,68,0.3); border-radius: 0; color: white; padding: 10px 16px; font-size: 15px; font-weight: bold; cursor: pointer;">
+                                        <option value="tiktok" selected>TikTok FYP</option>
+                                        <option value="instagram">Instagram Reels</option>
+                                    </select>
+                                </div>
+
+                                <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                                    <label style="font-size: 0.9rem; color: #aaa; font-weight: 500;">Target Count</label>
+                                    <select id="exploreCountSelect" style="background: #1e1e2d; border: 1px solid rgba(255,255,255,0.15); border-radius: 0; color: white; padding: 10px 16px; font-size: 15px; font-weight: bold; cursor: pointer;">
+                                        <option value="20">20 Videos (Quick)</option>
+                                        <option value="50">50 Videos</option>
+                                        <option value="100">100 Videos</option>
+                                        <option value="200" selected>200 Videos</option>
+                                        <option value="300">300 Videos</option>
+                                    </select>
+                                </div>
+
+                                <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                                    <label style="font-size: 0.9rem; color: #aaa; font-weight: 500;">Action Type</label>
+                                    <select id="exploreActionType" style="background: #1e1e2d; border: 1px solid rgba(255,255,255,0.15); border-radius: 0; color: white; padding: 10px 16px; font-size: 15px; cursor: pointer;">
+                                        <option value="collect">Add to Link Pool</option>
+                                        <option value="download">Auto Download</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div style="margin-top: auto; display: flex; gap: 0.8rem;">
+                                <button class="btn btn-primary" id="startHarvestBtn" style="background: linear-gradient(135deg, #ef4444, #dc2626); color: white; font-weight: bold; padding: 11px 22px; font-size: 15px;">
+                                    Start Crawling
+                                </button>
+                                <button class="btn btn-danger" id="stopHarvestBtn" style="display: none; padding: 11px 18px; font-size: 15px;">
+                                    Stop
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Progress Bar & Status -->
+                        <div id="harvestProgressArea" style="display: none; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.1);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                                <span id="harvestStatusText" style="font-size: 0.9rem; font-weight: 600; color: #ef4444;">
+                                    Scanning started...
+                                </span>
+                                <span id="harvestPercentText" style="font-size: 0.9rem; font-weight: bold; color: white;">
+                                    0 / 200
+                                </span>
+                            </div>
+                            <div style="width: 100%; height: 8px; background: rgba(255,255,255,0.1); border-radius: 0; overflow: hidden;">
+                                <div id="harvestProgressBar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #ef4444, #dc2626); transition: width 0.3s;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Link Pool Tab -->
+            <section class="tab-content" id="panelCollected">
+                <header class="main-header">
+                    <h2>Link Collection Pool</h2>
+                    <div class="header-actions">
+                        <button class="btn btn-secondary btn-sm" id="refreshLinksBtn">
+                            Refresh
+                        </button>
+                        <button class="btn btn-danger btn-sm" id="clearLinksBtn" style="display:none;">
+                            Clear All
+                        </button>
+                    </div>
+                </header>
+
+                <div class="tab-content-section">
+                    <div class="glass-card">
+                        <div class="card-header">
+                            <div class="card-icon" style="background: linear-gradient(135deg, #ef4444, #dc2626);">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+                                </svg>
+                            </div>
+                            <div>
+                                <h2>Collected Links</h2>
+                                <p>Links collected by extension and crawler</p>
+                            </div>
+                        </div>
+
+                        <!-- Toolbar & Filters -->
+                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem; background: rgba(0,0,0,0.3); padding: 1rem; border: 1px solid var(--border-color);">
+                            <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                                <span style="font-size: 0.9rem; color: var(--text-muted); font-weight: 600; margin-right: 0.3rem;">FILTER:</span>
+                                <button class="filter-chip active" id="selectAllBtn">All</button>
+                                <button class="filter-chip" id="selectIgBtn">Instagram</button>
+                                <button class="filter-chip" id="selectTtBtn">TikTok</button>
+                                <button class="filter-chip" id="selectYtBtn">YouTube</button>
+                                <button class="filter-chip" id="deselectAllBtn" style="color: var(--text-muted);">None</button>
+                            </div>
+                            
+                            <div style="display: flex; gap: 1rem; align-items: center;">
+                                <span id="selectedCountBadge" style="font-size: 0.9rem; color: #ef4444; font-weight: 700;">
+                                    0 videos selected
+                                </span>
+                                <button class="btn btn-primary btn-sm" id="downloadCollectedBtn" style="display:none; padding: 8px 18px; font-size: 0.9rem;">
+                                    Download Selected
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Video List -->
+                        <div class="collected-list" id="collectedList">
+                            <div class="empty-state">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:48px;height:48px;color:var(--text-muted);">
+                                    <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+                                </svg>
+                                <p>No collected links yet</p>
+                                <span>Use extension or crawler to collect videos</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Archive Tab -->
+            <section class="tab-content" id="panelDownloaded">
+                <header class="main-header">
+                    <h2>Video Archive</h2>
+                    <div class="header-actions">
+                        <button class="btn btn-secondary" id="openFolderBtn">
+                            Open Folder
+                        </button>
+                    </div>
+                </header>
+
+                <div class="tab-content-section">
+                    <div class="glass-card">
+                        <div class="card-header">
+                            <div class="card-icon" style="background: linear-gradient(135deg, #dc2626, #991b1b);">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                    <polyline points="7 10 12 15 17 10"></polyline>
+                                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                                </svg>
+                            </div>
+                            <div>
+                                <h2>Downloaded Videos</h2>
+                                <p>All videos saved in downloads folder</p>
+                            </div>
+                        </div>
+
+                        <div class="downloaded-list" id="downloadedList">
+                            <div class="empty-state">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:48px;height:48px;color:var(--text-muted);">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                    <polyline points="7 10 12 15 17 10"></polyline>
+                                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                                </svg>
+                                <p>No downloaded videos yet</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Twitter Video Viewer Tab -->
+            <section class="tab-content" id="panelTwitter">
+                <header class="main-header">
+                    <h2>Twitter Video Viewer</h2>
+                    <div class="header-actions">
+                        <button class="btn btn-secondary btn-sm" id="twitterRefreshBtn">
+                            Refresh
+                        </button>
+                    </div>
+                </header>
+
+                <div class="tab-content-section">
+                    <div class="glass-card">
+                        <div class="card-header">
+                            <div class="card-icon" style="background: linear-gradient(135deg, #1da1f2, #0d8bd9);">
+                                <svg viewBox="0 0 24 24" fill="currentColor" width="28" height="28">
+                                    <path d="M23 3a10.9 10.9 0 0 1-3.14 1.53 4.48 4.48 0 0 0-7.86 3v1A10.66 10.66 0 0 1 3 4s-4 9 5 13a11.64 11.64 0 0 1-7 2c9 5 20 0 20-11.5a4.5 4.5 0 0 0-.08-.83A7.72 7.72 0 0 0 23 3z"></path>
+                                </svg>
+                            </div>
+                            <div>
+                                <h2>Twitter Video Archive Browser</h2>
+                                <p>Browse and download videos from Twitter accounts</p>
+                            </div>
+                        </div>
+
+                        <!-- Authentication Notice -->
+                        <div class="alert-info" style="margin-bottom: 20px; padding: 15px; background: rgba(29, 161, 242, 0.1); border: 1px solid rgba(29, 161, 242, 0.3); border-radius: 4px;">
+                            <strong style="color: #1da1f2;">⚠️ Authentication Required:</strong> 
+                            <span style="color: rgba(255,255,255,0.8);">Twitter/X requires login to access user media.</span>
+                            <a href="#" onclick="toggleTwitterHelp(); return false;" style="color: #1da1f2; text-decoration: underline; margin-left: 8px;">How to set up cookies →</a>
+                        </div>
+                        
+                        <!-- Help Box -->
+                        <div id="twitterHelpBox" style="display: none; margin-bottom: 20px; padding: 15px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); border-radius: 4px; font-size: 0.9em;">
+                            <h4 style="margin: 0 0 12px 0; color: #1da1f2; font-size: 1em;">Cookie Setup Guide:</h4>
+                            <ol style="margin: 10px 0; padding-left: 20px; line-height: 1.8; color: rgba(255,255,255,0.85);">
+                                <li>Install browser extension: <strong style="color: #1da1f2;">Get cookies.txt LOCALLY</strong> (Chrome/Firefox)</li>
+                                <li>Login to <strong>Twitter/X</strong> in your browser</li>
+                                <li>Visit any Twitter profile page while logged in</li>
+                                <li>Click the extension icon → Export cookies as <strong>Netscape format</strong></li>
+                                <li>Save as <code style="background: rgba(0,0,0,0.5); padding: 2px 8px; border-radius: 3px; color: #1da1f2;">cookies.txt</code> in project root: <code style="background: rgba(0,0,0,0.5); padding: 2px 8px; border-radius: 3px;">c:\Users\babapro\Downloads\reelsindirici\</code></li>
+                                <li>Restart the server (close and run BASLAT.bat again)</li>
+                            </ol>
+                            <p style="margin: 12px 0 0 0; padding: 10px; background: rgba(239, 68, 68, 0.1); border-left: 3px solid #dc2626; font-size: 0.9em;">
+                                <strong>Note:</strong> Once configured, authentication will work automatically. Without cookies, Twitter videos cannot be loaded due to platform restrictions.
+                            </p>
+                        </div>
+
+                        <!-- Twitter Account Input -->
+                        <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem; align-items: flex-end; flex-wrap: wrap;">
+                            <div style="flex: 1; min-width: 250px;">
+                                <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.5rem; font-weight: 600;">
+                                    Twitter Username or Profile URL
+                                </label>
+                                <input 
+                                    type="text" 
+                                    id="twitterUsernameInput" 
+                                    placeholder="@username or https://twitter.com/username"
+                                    style="width: 100%; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 0; color: white; padding: 0.75rem; font-size: 0.95rem;"
+                                />
+                            </div>
+                            <div style="width: 140px;">
+                                <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.5rem; font-weight: 600;">
+                                    Video Limiti
+                                </label>
+                                <select id="twitterLimitSelect" style="width: 100%; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.15); color: white; padding: 0.72rem; font-size: 0.9rem; border-radius: 4px;">
+                                    <option value="500">500 Video</option>
+                                    <option value="1000">1000 Video</option>
+                                    <option value="2000">2000 Video</option>
+                                    <option value="all" selected>Tümü (Sınırsız)</option>
+                                </select>
+                            </div>
+                            <button class="btn btn-primary" id="twitterLoadBtn" style="background: linear-gradient(135deg, #1da1f2, #0d8bd9); height: 44px; padding: 0 1.5rem;">
+                                Load Videos
+                            </button>
+                        </div>
+
+                        <!-- Direct Video URL Download -->
+                        <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem; padding: 1rem; background: rgba(16, 185, 129, 0.05); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 4px; align-items: flex-end;">
+                            <div style="flex: 1;">
+                                <label style="display: block; font-size: 0.85rem; color: #10b981; margin-bottom: 0.5rem; font-weight: 600;">
+                                    📥 Direct Video Link Download
+                                </label>
+                                <input 
+                                    type="text" 
+                                    id="twitterDirectLinkInput" 
+                                    placeholder="Paste Twitter/X video URL: https://x.com/.../status/..."
+                                    style="width: 100%; background: rgba(0,0,0,0.3); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 4px; color: white; padding: 0.75rem; font-size: 0.9rem;"
+                                />
+                            </div>
+                            <button class="btn btn-primary" id="twitterDirectDownloadBtn" style="background: linear-gradient(135deg, #10b981, #059669); height: 44px; padding: 0 1.5rem;">
+                                Download
+                            </button>
+                        </div>
+
+                        <!-- Search Bar -->
+                        <div style="margin-bottom: 1.5rem;">
+                            <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.5rem; font-weight: 600;">
+                                Search in Videos
+                            </label>
+                            <input 
+                                type="text" 
+                                id="twitterSearchInput" 
+                                placeholder="Search by text, hashtag, date..."
+                                style="width: 100%; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 0; color: white; padding: 0.75rem; font-size: 0.95rem;"
+                                disabled
+                            />
+                        </div>
+
+                        <!-- Status Display -->
+                        <div id="twitterStatus" style="display: none; padding: 1rem; background: rgba(29, 161, 242, 0.1); border: 1px solid rgba(29, 161, 242, 0.3); margin-bottom: 1.5rem;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span id="twitterStatusText" style="color: #1da1f2; font-size: 0.9rem; font-weight: 600;"></span>
+                                <span id="twitterStatusCount" style="color: #1da1f2; font-size: 0.9rem; font-weight: 700;"></span>
+                            </div>
+                        </div>
+
+                        <!-- Video Grid -->
+                        <div id="twitterVideoGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem;">
+                            <!-- Empty state -->
+                            <div id="twitterEmptyState" class="empty-state" style="grid-column: 1 / -1;">
+                                <svg viewBox="0 0 24 24" fill="currentColor" style="width:48px;height:48px;color:#1da1f2;">
+                                    <path d="M23 3a10.9 10.9 0 0 1-3.14 1.53 4.48 4.48 0 0 0-7.86 3v1A10.66 10.66 0 0 1 3 4s-4 9 5 13a11.64 11.64 0 0 1-7 2c9 5 20 0 20-11.5a4.5 4.5 0 0 0-.08-.83A7.72 7.72 0 0 0 23 3z"></path>
+                                </svg>
+                                <p>Enter a Twitter username to browse videos</p>
+                                <span>Example: @verge, @elonmusk, @mkbhd</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Favorites Tab -->
+            <section class="tab-content" id="panelFavorites">
+                <header class="main-header">
+                    <h2>Favori Videolar</h2>
+                    <div class="header-actions">
+                        <button class="btn btn-secondary btn-sm" id="clearAllFavoritesBtn" style="color: #ef4444; border-color: rgba(239, 68, 68, 0.3);">
+                            Tümünü Temizle
+                        </button>
+                    </div>
+                </header>
+
+                <div class="tab-content-section">
+                    <div class="glass-card">
+                        <div class="card-header">
+                            <div class="card-icon" style="background: linear-gradient(135deg, #ef4444, #b91c1c);">
+                                <svg viewBox="0 0 24 24" fill="currentColor" width="26" height="26">
+                                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                                </svg>
+                            </div>
+                            <div>
+                                <h2>Kaydedilen Favori Videolar</h2>
+                                <p id="favoritesCountSubtitle">0 video kaydedildi</p>
+                            </div>
+                        </div>
+
+                        <!-- Favorites Search Bar -->
+                        <div style="margin-bottom: 1.5rem;">
+                            <input 
+                                type="text" 
+                                id="favoritesSearchInput" 
+                                placeholder="Favorilerimde ara (başlık, kullanıcı...)"
+                                style="width: 100%; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 0; color: white; padding: 0.75rem; font-size: 0.95rem;"
+                            />
+                        </div>
+
+                        <!-- Favorites Video Grid -->
+                        <div id="favoritesVideoGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 1.25rem;">
+                            <!-- Empty state -->
+                            <div id="favoritesEmptyState" class="empty-state" style="grid-column: 1 / -1; padding: 4rem 1rem;">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:52px;height:52px;color:#ef4444;opacity:0.8;margin-bottom:12px;">
+                                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                                </svg>
+                                <p style="font-size: 15px; font-weight: 600; color: #fff;">Henüz favori video eklenmedi</p>
+                                <span style="color: var(--text-muted); font-size: 13px; margin-top: 6px;">Twitter veya URL Downloader'daki videolarda kalp butonuna tıklayarak buraya kaydedebilirsin.</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <!-- Cookie Modal -->
+    <div id="cookieModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center; backdrop-filter: blur(10px);">
+        <div class="glass-card" style="padding: 1.5rem; width: 90%; max-width: 500px; position: relative;">
+            <button id="closeCookieBtn" style="position: absolute; top: 10px; right: 15px; background: none; border: none; color: white; font-size: 20px; cursor: pointer;">&times;</button>
+            <h3 style="margin-bottom: 8px; display: flex; align-items: center; gap: 8px;">Cookie Settings</h3>
+            <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 12px;">
+                Instagram veya TikTok hesabının cookie bilgilerini ekleyerek giriş gerektiren videoları indirebilirsin
+            </p>
+            
+            <div id="cookieStatusInfo" style="padding: 10px; border-radius: 0; background: rgba(255,255,255,0.05); margin-bottom: 12px; font-size: 13px;">
+                Status: <strong id="cookieStatusText" style="color: #ef4444;">cookies.txt not found</strong>
+            </div>
+
+            <div style="margin-bottom: 12px;">
+                <label style="font-size: 12px; color: var(--text-muted); display: block; margin-bottom: 5px;">Upload .txt file:</label>
+                <input type="file" id="cookieFileInput" accept=".txt" style="font-size: 12px; color: var(--text-secondary); width: 100%;">
+            </div>
+
+            <div style="margin-bottom: 15px;">
+                <label style="font-size: 12px; color: var(--text-muted); display: block; margin-bottom: 5px;">Or paste cookie text:</label>
+                <textarea id="cookieTextInput" placeholder="# Netscape HTTP Cookie File&#10;.instagram.com TRUE / TRUE ... sessionid=..." style="width: 100%; height: 110px; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1); border-radius: 0; color: white; padding: 8px; font-family: monospace; font-size: 11px; resize: vertical;"></textarea>
+            </div>
+
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button id="deleteCookieBtn" class="btn btn-secondary btn-sm" style="color: #ef4444; border-color: rgba(239,68,68,0.4); display: none;">
+                    Delete
+                </button>
+                <button id="saveCookieBtn" class="btn btn-primary btn-sm">
+                    Save
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- QR Modal -->
+    <div id="qrModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center; backdrop-filter: blur(10px);">
+        <div class="glass-card" style="padding: 2rem; text-align: center; max-width: 350px; position: relative;">
+            <button id="closeQrBtn" style="position: absolute; top: 10px; right: 15px; background: none; border: none; color: white; font-size: 20px; cursor: pointer;">&times;</button>
+            <h3 style="margin-bottom: 15px;">Mobile Connection</h3>
+            <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 20px;">Scan QR code with phone camera on same Wi-Fi:</p>
+            <div id="qrContainer" style="background: white; padding: 15px; border-radius: 0; display: inline-block;">
+                <img id="qrImage" src="" alt="QR Code" style="width: 200px; height: 200px;">
+            </div>
+            <p style="font-size: 12px; color: var(--text-muted); margin-top: 20px;">Or type in browser:<br><strong id="ipText" style="color: white; font-size: 14px; user-select: all;"></strong></p>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

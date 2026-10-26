@@ -1,0 +1,45 @@
+{
+  "manifest_version": 3,
+  "name": "Video Pro - Reels & Video İndirici",
+  "version": "2.0",
+  "description": "Instagram Reels, TikTok, YouTube Shorts ve X/Twitter videolarını doğrudan indirin ve akışları toplayın.",
+  "permissions": [
+    "storage",
+    "tabs",
+    "webRequest",
+    "alarms",
+    "webNavigation",
+    "cookies",
+    "downloads"
+  ],
+  "host_permissions": [
+    "*://*.instagram.com/*",
+    "*://*.tiktok.com/*",
+    "*://*.twitter.com/*",
+    "*://*.x.com/*",
+    "http://localhost:3000/*",
+    "http://127.0.0.1:3000/*",
+    "http://192.168.*.*/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.instagram.com/*",
+        "*://*.tiktok.com/*"
+      ],
+      "js": ["content.js"]
+    }
+  ],
+  "action": {
+    "default_title": "Reels & TikTok Toplayıcı",
+    "default_popup": "popup.html"
+  },
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}
