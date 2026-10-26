@@ -29,13 +29,17 @@ async function sendToServer(linksArray) {
     if (linksArray.length === 0) return;
     
     try {
+        console.log('[Reels Toplayıcı] 📤 Sunucuya gönderiliyor:', linksArray);
         const response = await fetch('http://localhost:3000/api/save-links', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ links: linksArray })
         });
         
-        if (response.ok) {
+        const data = await response.json();
+        console.log('[Reels Toplayıcı] ✅ Sunucu yanıtı:', data);
+        
+        if (response.ok && data.success) {
             isServerConnected = true;
             
             // Remove successfully sent links from storage
@@ -46,12 +50,15 @@ async function sendToServer(linksArray) {
                 
                 chrome.storage.local.set({ collectedLinks: currentLinks }, () => {
                     updateBadge(currentLinks.length);
+                    console.log('[Reels Toplayıcı] 🧹 Storage temizlendi, kalan:', currentLinks.length);
                 });
             });
+        } else {
+            console.error('[Reels Toplayıcı] ❌ Sunucu hatası:', data);
         }
     } catch (err) {
         isServerConnected = false;
-        console.log("Sunucuya ulaşılamadı. Linkler eklenti belleğinde tutuluyor.");
+        console.error('[Reels Toplayıcı] ❌ Bağlantı hatası:', err);
     }
 }
 
@@ -64,13 +71,18 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 
 async function checkServerConnection() {
     try {
-        const response = await fetch('http://localhost:3000/api/files', { method: 'GET' });
+        console.log('[Reels Toplayıcı] 🔍 Sunucu kontrolü yapılıyor...');
+        const response = await fetch('http://localhost:3000/api/saved-links', { method: 'GET' });
+        const wasConnected = isServerConnected;
         isServerConnected = response.ok;
+        
+        console.log('[Reels Toplayıcı] 🌐 Sunucu durumu:', isServerConnected ? 'BAĞLI ✅' : 'BAĞLI DEĞİL ❌');
         
         if (isServerConnected) {
             // Try to send pending links
             chrome.storage.local.get(['collectedLinks'], (result) => {
                 const links = result.collectedLinks || [];
+                console.log('[Reels Toplayıcı] 📦 Bekleyen linkler:', links.length);
                 if (links.length > 0) {
                     const linksArray = links.map(url => ({ url, title: "Otomatik Toplanan Link" }));
                     sendToServer(linksArray);
@@ -79,6 +91,7 @@ async function checkServerConnection() {
         }
     } catch (err) {
         isServerConnected = false;
+        console.error('[Reels Toplayıcı] ❌ Sunucu kontrolü hatası:', err);
     }
 }
 
@@ -97,7 +110,9 @@ function checkUrl(url) {
             return;
         }
         
+        let isValid = false;
         const cleanNoQuery = url.split('?')[0].replace(/\/+$/, '');
+        
         // Instagram: /reel/ID veya /p/ID olmalı, genel akış /reels değil!
         if ((cleanNoQuery.includes('instagram.com/reel/') || cleanNoQuery.includes('instagram.com/p/')) && !cleanNoQuery.endsWith('/reels')) {
             isValid = true;

@@ -876,7 +876,10 @@ const linksFile = path.join(__dirname, 'collected_links.json');
 
 app.post('/api/save-links', (req, res) => {
     const { links } = req.body;
+    console.log('📥 [API] /api/save-links isteği alındı:', { linkCount: links?.length, links });
+    
     if (!links || !Array.isArray(links)) {
+        console.error('❌ [API] Geçersiz istek:', req.body);
         return res.status(400).json({ success: false, error: 'Link listesi gerekli' });
     }
 
@@ -885,6 +888,7 @@ app.post('/api/save-links', (req, res) => {
         if (fs.existsSync(linksFile)) {
             existing = JSON.parse(fs.readFileSync(linksFile, 'utf-8'));
         }
+        console.log('📂 [API] Mevcut linkler:', existing.length);
 
         // Yeni linkleri ekle (tekrarlamayanları)
         const existingUrls = new Set(existing.map(l => l.url));
@@ -894,14 +898,16 @@ app.post('/api/save-links', (req, res) => {
 
         const all = [...existing, ...newLinks];
         fs.writeFileSync(linksFile, JSON.stringify(all, null, 2));
-
+        
+        console.log('✅ [API] Linkler kaydedildi! Yeni:', newLinks.length, 'Toplam:', all.length);
         res.json({ success: true, added: newLinks.length, total: all.length });
     } catch (err) {
+        console.error('❌ [API] Kaydetme hatası:', err);
         res.json({ success: false, error: err.message });
     }
 });
 
-// Kaydedilen linkleri getir (Hem data.links hem de Array.isArray(data) tam uyumlu)
+// Kaydedilen linkleri getir
 app.get('/api/saved-links', (req, res) => {
     try {
         let links = [];
@@ -910,19 +916,8 @@ app.get('/api/saved-links', (req, res) => {
             if (!Array.isArray(links)) links = [];
         }
         
-        // Eğer query ?format=array istenirse direkt [] döner
-        if (req.query.format === 'array') {
-            return res.json(links);
-        }
-        
-        // Varsayılan: Hem Array.isArray hem data.links uyumu için links'i dizi olarak JSON formatına uyduruyoruz
-        // JSON formatında bir dizi nesnesine .links = [...] ekleyemeyiz ama Express'te hem { links } hem de doğrudan array bekleyen yerler için:
-        // public/app.js data.links bekliyor.
-        // mobile/App.js her ikisini de destekliyor.
-        // Next.js frontend'i Array.isArray(data) ? data : data.links destekliyor.
-        // Bu yüzden { links, success: true } dönmek ve dizi isteyenler için format parametresi sunmak en güvenlisidir.
-        // Ayrıca dizi olarak serialize ederken ek alan taşınamadığından { links } standardına dönüp frontend'lerin hepsini çift uyumlu yapıyoruz.
-        res.json({ links, length: links.length });
+        // Frontend'in beklediği format: { links: [...] }
+        res.json({ links: links, length: links.length });
     } catch (err) {
         res.json({ links: [], length: 0 });
     }
