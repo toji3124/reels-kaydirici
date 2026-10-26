@@ -10,3 +10,13 @@ logs_*/
 yt-dlp.exe
 ffmpeg.exe
 ffprobe.exe
+
+# Expo prebuild generated files
+android/
+ios/
+.expo/
+
+# Expo prebuild generated files
+android/
+ios/
+.expo/
