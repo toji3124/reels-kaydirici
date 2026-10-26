@@ -1,0 +1,4 @@
+[submodule "mobile"]
+	path = mobile
+	url = https://github.com/toji3124/reels-kaydirici.git
+	branch = master
