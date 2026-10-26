@@ -5,7 +5,7 @@ import {
   Alert, StatusBar, Pressable, LogBox, Image, ScrollView, Modal, AppState 
 } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from 'expo-file-system';
 import Slider from '@react-native-community/slider';
 import PagerView from 'react-native-pager-view';
 import { LinearGradient } from 'expo-linear-gradient';
