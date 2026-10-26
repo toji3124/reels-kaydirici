@@ -1,23 +1,27 @@
 {
   "expo": {
     "name": "Reels Kaydirici",
-    "slug": "mobile",
+    "slug": "reels-kaydirici",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#09090b"
+    },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.reelsindirici.app"
     },
     "android": {
       "package": "com.reelsindirici.app",
       "permissions": [
         "READ_EXTERNAL_STORAGE",
         "WRITE_EXTERNAL_STORAGE",
-        "MANAGE_EXTERNAL_STORAGE",
         "READ_MEDIA_VIDEO",
-        "READ_MEDIA_IMAGES",
-        "READ_MEDIA_AUDIO"
+        "READ_MEDIA_IMAGES"
       ],
       "adaptiveIcon": {
         "backgroundColor": "#09090b",
@@ -43,8 +47,7 @@
           "icon": "./assets/icon.png",
           "color": "#e11d48"
         }
-      ],
-      "expo-status-bar"
+      ]
     ],
     "extra": {
       "eas": {
